@@ -1,8 +1,9 @@
-export type DeskInteraction = { seatId: string; label: string };
+export type FocusSpot = { seatId: string; label: string };
 export type FocusStarted = { taskId: string; taskTitle: string; seatId: string };
 
 type BridgeEvents = {
-  'desk.interacted': DeskInteraction;
+  'focus.open': FocusSpot | null;
+  'tasks.open': undefined;
   'focus.started': FocusStarted;
   'focus.stopped': undefined;
   'game.error': { message: string };

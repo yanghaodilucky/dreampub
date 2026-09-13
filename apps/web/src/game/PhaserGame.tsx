@@ -13,5 +13,5 @@ export function PhaserGame() {
     };
   }, []);
 
-  return <div id="game-container" aria-label="DreamPub 像素图书馆" />;
+  return <div id="game-container" aria-label="Dream Cafe 像素咖啡馆" />;
 }

@@ -39,7 +39,7 @@ NPC 的移动目标、活动切换、说话等语义变化持久化。逐帧 x/y
 
 ## REST 与 WebSocket
 
-REST 负责持久业务操作与读取：`GET/POST /projects`、`POST/PATCH /tasks`、`POST /focus-sessions`、`POST /focus-sessions/{id}/pause|resume|finish|cancel`、`GET /world/library`、`GET /npcs/{id}`、`POST /npcs/{id}/messages`。
+REST 负责持久业务操作与读取：`GET/POST /projects`、`POST/PATCH /tasks`、`POST /focus-sessions`、`POST /focus-sessions/{id}/pause|resume|finish|cancel`、`GET /world/cafe`、`GET /npcs/{id}`、`POST /npcs/{id}/messages`。
 
 World Engine 执行坐下等交互前，检查距离、位置、障碍和座位占用。后端从认证上下文推导 actor_id / world_id；不信任客户端自报身份。
 
@@ -59,7 +59,7 @@ WebSocket 首版即使用，但只连接用户自己的世界。协议区分 sna
 - Store → Phaser：已确认的 `world.event`、`world.snapshot` 和实时状态变化。
 - Phaser → 网络层：限频的移动意图；服务端负责合法性检查。
 
-React 不引用 LibraryScene.player；Phaser 不直接修改项目状态或调用模型。规范中的动作模型与 WorldEvent payload 分开：动作尚待验证，事件已经发生。
+React 不引用 CafeScene.player；Phaser 不直接修改项目状态或调用模型。规范中的动作模型与 WorldEvent payload 分开：动作尚待验证，事件已经发生。
 
 ## 三类 State
 
@@ -77,7 +77,7 @@ React 不引用 LibraryScene.player；Phaser 不直接修改项目状态或调�
 
 ## 扩展接口
 
-Location 定义类型、地图资源和交互点；Avatar 使用外观配置引用；Furniture 用静态定义与实例分离；EnvironmentProvider 未来提供天气等表现输入。首版只注册 library、固定外观和静态家具。contracts 暂不接受未实现的事件；新增事件需同步 Schema、执行器、客户端和测试。
+Location 定义类型、地图资源和交互点；Avatar 使用外观配置引用；Furniture 用静态定义与实例分离；EnvironmentProvider 未来提供天气等表现输入。首版只注册 cafe、固定外观和静态家具。contracts 暂不接受未实现的事件；新增事件需同步 Schema、执行器、客户端和测试。
 
 ## 失败处理
 

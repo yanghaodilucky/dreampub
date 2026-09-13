@@ -10,7 +10,7 @@
     "timestamp": "2026-09-12T13:00:00Z",
     "actor_id": "user_haodi",
     "actor_kind": "user",
-    "location_id": "library_001",
+    "location_id": "cafe_001",
     "causation_id": null,
     "payload": {
       "session_id": "focus_001",

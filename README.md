@@ -1,12 +1,12 @@
 # DreamPub
 
-一个可以进入的 2D 像素图书馆：完成真实专注任务、查看项目进度，与有自主作息和长期记忆的 NPC 一起学习。
+一个可以进入的 2D 像素咖啡馆：完成真实专注任务、查看项目进度，与有自主作息和长期记忆的 NPC 一起学习。
 
 个人仓库：<https://github.com/yanghaodilucky/dreampub>。
 
 ## 当前状态
 
-已有可运行的前端 Game Shell：React 产品界面、Phaser 图书馆、玩家移动与碰撞、座位交互、前端任务选择和临时专注计时。World Event / NPC Action / WebSocket 契约已确定。后端、持久化、真实专注记录、NPC simulation 和模型接入尚未实现。
+已有可运行的前端 Game Shell：React 右侧任务／专注抽屉、Phaser Dream Cafe、玩家移动与碰撞、座位和项目板交互、前端任务选择和临时专注计时。World Event / NPC Action / WebSocket 契约已确定。后端、持久化、真实专注记录、NPC simulation 和模型接入尚未实现。
 
 启动本地原型：
 
@@ -20,7 +20,7 @@ pnpm dev
 
 ## 首版
 
-- 网页端，一个像素图书馆、一个玩家、两个 NPC（第三个待核心闭环验证后加入）。
+- 网页端，一个像素咖啡馆、一个玩家、两个 NPC（Loopy 和 Evan；第三个待核心闭环验证后加入）。
 - 项目、任务、真实专注计时与持久化记录、项目进度板。
 - NPC 确定性作息、事件感知、受控动作、长期记忆和可追踪决策。
 - 第二阶段加入好友联机。家、咖啡馆、换装、家具编辑、天气仅保留扩展位置。

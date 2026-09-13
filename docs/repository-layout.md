@@ -6,7 +6,7 @@
 apps/web/src/
   app/                     React 入口、路由、页面布局
   game/
-    scenes/                BootScene.ts、LibraryScene.ts
+    scenes/                CafeScene.ts
     entities/              Player.ts、NPC.ts
     systems/               MovementSystem.ts、InteractionSystem.ts、AnimationSystem.ts
     bridge/                GameBridge.ts、事件类型与监听生命周期
