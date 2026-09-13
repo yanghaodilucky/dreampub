@@ -6,7 +6,17 @@
 
 ## 当前状态
 
-处于设计与契约阶段。已确定首版范围、模块边界、World Event / NPC Action / WebSocket 契约与开发顺序；尚无可运行的前后端、地图或模型接入。目录中的 `.gitkeep` 仅保留结构。
+已有可运行的前端 Game Shell：React 产品界面、Phaser 图书馆、玩家移动与碰撞、座位交互、前端任务选择和临时专注计时。World Event / NPC Action / WebSocket 契约已确定。后端、持久化、真实专注记录、NPC simulation 和模型接入尚未实现。
+
+启动本地原型：
+
+```sh
+cd apps/web
+pnpm install
+pnpm dev
+```
+
+在浏览器打开命令显示的本地地址。使用方向键或 WASD 移动，靠近书桌按 E，或点击座位；选择任务后可查看临时计时。原型任务与计时刷新后会清空。
 
 ## 首版
 
