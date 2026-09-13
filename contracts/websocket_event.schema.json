@@ -1,0 +1,517 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dreampub:websocket-event:v1",
+  "title": "World WebSocket wire protocol v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "world.event"
+        },
+        "event": {
+          "$ref": "urn:dreampub:world-event:v1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "event"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "snapshot"
+        },
+        "world_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "location_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stream_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "last_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "server_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "map_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "actor_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "actor_kind": {
+                "enum": [
+                  "user",
+                  "npc"
+                ]
+              },
+              "location_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "facing": {
+                "enum": [
+                  "up",
+                  "down",
+                  "left",
+                  "right"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "idle",
+                  "moving",
+                  "working",
+                  "break",
+                  "offstage"
+                ]
+              },
+              "focus_session_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "actor_id",
+              "actor_kind",
+              "location_id",
+              "x",
+              "y",
+              "facing",
+              "state",
+              "focus_session_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "anchor_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "kind": {
+                "enum": [
+                  "spawn",
+                  "seat",
+                  "shelf",
+                  "exit"
+                ]
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "anchor_id",
+              "kind",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "furniture": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "instance_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "definition_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "instance_id",
+              "definition_id",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "focus_sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "actor_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "project_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "task_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "paused"
+                ]
+              },
+              "planned_duration_seconds": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "elapsed_seconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "expected_end_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "session_id",
+              "actor_id",
+              "project_id",
+              "task_id",
+              "status",
+              "planned_duration_seconds",
+              "elapsed_seconds",
+              "expected_end_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "world_id",
+        "location_id",
+        "stream_id",
+        "last_sequence",
+        "revision",
+        "server_time",
+        "timezone",
+        "map_id",
+        "entities",
+        "anchors",
+        "furniture",
+        "focus_sessions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "state.delta"
+        },
+        "world_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "location_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stream_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "server_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "actor_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "actor_kind": {
+                "enum": [
+                  "user",
+                  "npc"
+                ]
+              },
+              "location_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "facing": {
+                "enum": [
+                  "up",
+                  "down",
+                  "left",
+                  "right"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "idle",
+                  "moving",
+                  "working",
+                  "break",
+                  "offstage"
+                ]
+              },
+              "focus_session_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "actor_id",
+              "actor_kind",
+              "location_id",
+              "x",
+              "y",
+              "facing",
+              "state",
+              "focus_session_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "removed_actor_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "world_id",
+        "location_id",
+        "stream_id",
+        "revision",
+        "server_time",
+        "entities",
+        "removed_actor_ids"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "resync.required"
+        },
+        "world_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reason": {
+          "enum": [
+            "sequence_gap",
+            "cursor_expired",
+            "stream_changed"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "world_id",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "resume"
+        },
+        "world_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "last_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stream_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "world_id",
+        "last_sequence",
+        "stream_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "movement.intent"
+        },
+        "input_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right",
+            "stop"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "input_id",
+        "direction"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

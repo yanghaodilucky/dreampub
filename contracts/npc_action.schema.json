@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dreampub:npc-action:v1",
+  "title": "Untrusted NPC action proposal v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "speak"
+        },
+        "target_actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "emotion": {
+          "enum": [
+            "neutral",
+            "warm",
+            "curious",
+            "encouraging"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "action",
+        "target_actor_id",
+        "emotion",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "move"
+        },
+        "target_anchor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "action",
+        "target_anchor_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "start_focus"
+        },
+        "activity": {
+          "enum": [
+            "reading",
+            "drawing",
+            "researching",
+            "organizing"
+          ]
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        }
+      },
+      "required": [
+        "action",
+        "activity",
+        "duration_minutes"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "wait"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        }
+      },
+      "required": [
+        "action",
+        "duration_seconds"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

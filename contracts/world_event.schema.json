@@ -1,0 +1,792 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "world_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "type": {
+      "enum": [
+        "player.arrived",
+        "player.seated",
+        "player.stood",
+        "project.created",
+        "project.completed",
+        "task.created",
+        "task.status_changed",
+        "focus.started",
+        "focus.paused",
+        "focus.resumed",
+        "focus.finished",
+        "focus.cancelled",
+        "user.spoke",
+        "npc.arrived",
+        "npc.departed",
+        "npc.movement_started",
+        "npc.activity_started",
+        "npc.waited",
+        "npc.spoke",
+        "project.updated",
+        "task.updated"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "actor_kind": {
+      "enum": [
+        "user",
+        "npc",
+        "system"
+      ]
+    },
+    "location_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "causation_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "world_id",
+    "sequence",
+    "type",
+    "timestamp",
+    "actor_id",
+    "actor_kind",
+    "location_id",
+    "causation_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "urn:dreampub:world-event:v1",
+  "title": "Authoritative durable world event v1",
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "player.arrived"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "anchor_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "anchor_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "player.seated"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "seat_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "seat_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "player.stood"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "seat_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "seat_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "project.created"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "project_id",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "project.completed"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "project_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "task.created"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "project_id",
+            "task_id",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "task.status_changed"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "status": {
+              "enum": [
+                "todo",
+                "doing",
+                "done"
+              ]
+            }
+          },
+          "required": [
+            "project_id",
+            "task_id",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "focus.started"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seat_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "planned_duration_seconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 14400
+            },
+            "started_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expected_end_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "session_id",
+            "project_id",
+            "task_id",
+            "seat_id",
+            "planned_duration_seconds",
+            "started_at",
+            "expected_end_at"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "focus.paused"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "elapsed_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "paused_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "session_id",
+            "elapsed_seconds",
+            "paused_at"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "focus.resumed"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "elapsed_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resumed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expected_end_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "session_id",
+            "elapsed_seconds",
+            "resumed_at",
+            "expected_end_at"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "focus.finished"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "elapsed_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "finished_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "reason": {
+              "const": "target_reached"
+            }
+          },
+          "required": [
+            "session_id",
+            "project_id",
+            "task_id",
+            "elapsed_seconds",
+            "finished_at",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "focus.cancelled"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "elapsed_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cancelled_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "session_id",
+            "project_id",
+            "task_id",
+            "elapsed_seconds",
+            "cancelled_at"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "user.spoke"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "target_npc_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "target_npc_id",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.arrived"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "anchor_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "anchor_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.departed"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "enum": [
+                "schedule",
+                "goal"
+              ]
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.movement_started"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "target_anchor_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "target_anchor_id"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.activity_started"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "activity": {
+              "enum": [
+                "reading",
+                "drawing",
+                "researching",
+                "organizing"
+              ]
+            },
+            "duration_seconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 7200
+            }
+          },
+          "required": [
+            "activity",
+            "duration_seconds"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.waited"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "duration_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            }
+          },
+          "required": [
+            "duration_seconds"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "npc.spoke"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "target_actor_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "emotion": {
+              "enum": [
+                "neutral",
+                "warm",
+                "curious",
+                "encouraging"
+              ]
+            }
+          },
+          "required": [
+            "target_actor_id",
+            "content",
+            "emotion"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "npc"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "project.updated"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "project_id",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "task.updated"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "task_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "project_id",
+            "task_id",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "actor_kind": {
+          "const": "user"
+        }
+      }
+    }
+  ]
+}

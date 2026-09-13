@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "ad22482b-8f1a-48f4-afc0-9f776f21294d",
+  "world_id": "world_haodi",
+  "sequence": 1,
+  "type": "focus.started",
+  "timestamp": "2026-09-12T13:00:00Z",
+  "actor_id": "user_haodi",
+  "actor_kind": "user",
+  "location_id": "library_001",
+  "causation_id": null,
+  "payload": {
+    "session_id": "focus_001",
+    "project_id": "dreampub",
+    "task_id": "task_memory",
+    "seat_id": "desk_01",
+    "planned_duration_seconds": 1500,
+    "started_at": "2026-09-12T13:00:00Z",
+    "expected_end_at": "2026-09-12T13:25:00Z"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "action": "speak",
+  "target_actor_id": "user_haodi",
+  "emotion": "warm",
+  "content": "欢迎回来，今天也在整理你的项目吗？"
+}
