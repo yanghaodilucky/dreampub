@@ -33,18 +33,18 @@ export class CafeScene extends Scene {
     ['window-four-01', { x: 316, y: 460 }],
     ['window-two-02', { x: 295, y: 610 }],
     ['community-01', { x: 560, y: 450 }],
-    ['fireplace-chair-01', { x: 882, y: 548 }],
-    ['fireplace-chair-02', { x: 882, y: 640 }],
-    ['fireplace-beanbag-01', { x: 1007, y: 594 }],
+    ['fireplace-chair-01', { x: 872, y: 528 }],
+    ['fireplace-chair-02', { x: 872, y: 668 }],
+    ['fireplace-beanbag-01', { x: 1027, y: 689 }],
   ]);
   private exitCoordinates = new Map<string, { x: number; y: number }>([
     ['window-two-01', { x: 385, y: 310 }],
     ['window-four-01', { x: 410, y: 460 }],
     ['window-two-02', { x: 385, y: 610 }],
     ['community-01', { x: 670, y: 450 }],
-    ['fireplace-chair-01', { x: 790, y: 548 }],
-    ['fireplace-chair-02', { x: 790, y: 640 }],
-    ['fireplace-beanbag-01', { x: 935, y: 660 }],
+    ['fireplace-chair-01', { x: 780, y: 528 }],
+    ['fireplace-chair-02', { x: 780, y: 668 }],
+    ['fireplace-beanbag-01', { x: 930, y: 705 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
@@ -173,9 +173,9 @@ export class CafeScene extends Scene {
     this.addObstacle(700, 250, 300, 70);
     this.addObstacle(500, 300, 120, 300);
     this.addObstacle(1018, 490, 88, 130);
-    this.addObstacle(830, 510, 105, 76);
-    this.addObstacle(830, 602, 105, 76);
-    this.addObstacle(950, 555, 115, 78);
+    this.addObstacle(820, 490, 105, 76);
+    this.addObstacle(820, 630, 105, 76);
+    this.addObstacle(970, 650, 115, 78);
     this.addObstacle(1042, 318, 60, 126);
     this.addObstacle(250, 275, 90, 54);
     this.addObstacle(250, 415, 132, 64);
@@ -396,9 +396,9 @@ export class CafeScene extends Scene {
       graphics.fillStyle(0x8c5d42, 1);
       graphics.fillRect(1040, 566, 44, 8);
     }
-    this.drawArmchair(graphics, 830, 510, 105, 76);
-    this.drawArmchair(graphics, 830, 602, 105, 76);
-    this.drawBeanBag(graphics, 950, 555, 115, 78);
+    this.drawArmchair(graphics, 820, 490, 105, 76);
+    this.drawArmchair(graphics, 820, 630, 105, 76);
+    this.drawBeanBag(graphics, 970, 650, 115, 78);
     this.add.text(1018, 476, isNight ? '炉火正暖' : '壁炉', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
   }
 
