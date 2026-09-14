@@ -3,8 +3,12 @@ import { gameBridge, type FocusStarted, type FocusSpot } from '../bridge/GameBri
 
 type Obstacle = { x: number; y: number; width: number; height: number };
 
-const WORLD_WIDTH = 1200;
-const WORLD_HEIGHT = 820;
+const WORLD_WIDTH = 2400;
+const WORLD_HEIGHT = 1800;
+const CAFE_WIDTH = 1200;
+const CAFE_HEIGHT = 820;
+const CAFE_X = 600;
+const CAFE_Y = 600;
 const PLAYER_SIZE = 22;
 
 export class CafeScene extends Scene {
@@ -38,6 +42,9 @@ export class CafeScene extends Scene {
   private isSitting = false;
   private isFocusing = false;
   private worldTimeMode = '';
+  private isCameraDragging = false;
+  private dragStart?: { x: number; y: number; scrollX: number; scrollY: number };
+  private lastCameraDragAt = 0;
   private unsubscribeFocus?: () => void;
   private unsubscribeLeave?: () => void;
   private unsubscribeStopped?: () => void;
@@ -49,10 +56,14 @@ export class CafeScene extends Scene {
   create() {
     try {
       this.worldTimeMode = this.getWorldTimeMode();
+      this.drawOutdoors();
+      const cafeChildStart = this.children.list.length;
       this.drawCafe();
       this.createPeople();
       this.createInput();
       this.createHotspots();
+      this.placeCafeInWorld(cafeChildStart);
+      this.setupCamera();
       this.unsubscribeFocus = gameBridge.on('focus.started', (focus) => this.startFocus(focus));
       this.unsubscribeLeave = gameBridge.on('focus.leave', () => this.leaveSeat());
       this.unsubscribeStopped = gameBridge.on('focus.stopped', () => this.stopFocus());
@@ -111,27 +122,27 @@ export class CafeScene extends Scene {
 
     this.cameras.main.setBackgroundColor(daylight ? '#83b2c1' : '#182237');
     graphics.fillStyle(daylight ? 0x62787a : 0x263246, 1);
-    graphics.fillRect(0, 0, 104, WORLD_HEIGHT);
+    graphics.fillRect(0, 0, 104, CAFE_HEIGHT);
     graphics.fillStyle(daylight ? 0xb9aa91 : 0x4b5160, 1);
-    graphics.fillRect(86, 0, 12, WORLD_HEIGHT);
+    graphics.fillRect(86, 0, 12, CAFE_HEIGHT);
     graphics.fillStyle(daylight ? 0xdfd0ac : 0x677083, 1);
-    graphics.fillRect(99, 0, 5, WORLD_HEIGHT);
+    graphics.fillRect(99, 0, 5, CAFE_HEIGHT);
     graphics.lineStyle(1, daylight ? 0x8e9b99 : 0x40516a, 0.9);
-    for (let y = 0; y < WORLD_HEIGHT; y += 22) {
+    for (let y = 0; y < CAFE_HEIGHT; y += 22) {
       graphics.lineBetween(7, y, 83, y);
       if ((y / 22) % 2 === 0) graphics.lineBetween(45, y, 45, y + 22);
     }
     graphics.lineStyle(2, daylight ? 0xefdaaa : 0x5b6272, 0.85);
-    for (let y = 10; y < WORLD_HEIGHT; y += 56) graphics.lineBetween(48, y, 48, y + 25);
+    for (let y = 10; y < CAFE_HEIGHT; y += 56) graphics.lineBetween(48, y, 48, y + 25);
     this.drawPlaneTree(graphics, 34, 166, daylight);
     this.drawPlaneTree(graphics, 62, 430, daylight);
     this.drawPlaneTree(graphics, 33, 700, daylight);
     this.add.text(10, 48, 'RUE\nDES\nRÊVES', { color: '#edf0df', fontFamily: 'monospace', fontSize: '9px', lineSpacing: 2, letterSpacing: 1 });
 
     graphics.fillStyle(0x332728, 1);
-    graphics.fillRoundedRect(104, 35, 1056, 750, 10);
+    graphics.fillRoundedRect(104, 35, CAFE_WIDTH - 144, 750, 10);
     graphics.fillStyle(0xc78762, 1);
-    graphics.fillRect(134, 65, 1000, 690);
+    graphics.fillRect(134, 65, CAFE_WIDTH - 200, 690);
     graphics.lineStyle(1, 0x9d614e, 0.62);
     for (let x = 134; x < 1135; x += 35) graphics.lineBetween(x, 65, x, 755);
     for (let y = 65; y < 756; y += 35) graphics.lineBetween(134, y, 1134, y);
@@ -160,6 +171,90 @@ export class CafeScene extends Scene {
     this.addObstacle(250, 275, 90, 54);
     this.addObstacle(250, 415, 132, 64);
     this.addObstacle(250, 575, 90, 54);
+  }
+
+  private drawOutdoors() {
+    const graphics = this.add.graphics();
+    const daylight = this.getWorldTimeMode() !== 'night';
+
+    this.cameras.main.setBackgroundColor(daylight ? '#83b2c1' : '#182237');
+    graphics.fillStyle(daylight ? 0x82b5c3 : 0x1d2a40, 1);
+    graphics.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+    graphics.fillStyle(daylight ? 0x78928f : 0x344653, 1);
+    graphics.fillRect(0, 300, WORLD_WIDTH, 215);
+    graphics.fillStyle(daylight ? 0xdacb9e : 0x697185, 1);
+    graphics.fillRect(0, 515, WORLD_WIDTH, 62);
+    graphics.fillStyle(daylight ? 0xe8d9b4 : 0x7e8491, 1);
+    graphics.fillRect(0, 577, WORLD_WIDTH, 18);
+    graphics.lineStyle(3, daylight ? 0xf4df9f : 0x8d91a0, 0.85);
+    for (let x = 25; x < WORLD_WIDTH; x += 96) graphics.lineBetween(x, 406, x + 46, 406);
+
+    graphics.fillStyle(daylight ? 0x638472 : 0x294a4a, 1);
+    graphics.fillRect(0, 595, WORLD_WIDTH, WORLD_HEIGHT - 595);
+    graphics.fillStyle(daylight ? 0x99ad72 : 0x465f58, 1);
+    graphics.fillRect(0, 274, WORLD_WIDTH, 26);
+    graphics.lineStyle(1, daylight ? 0xa28c68 : 0x43525b, 0.35);
+    for (let x = 0; x <= WORLD_WIDTH; x += 40) graphics.lineBetween(x, 595, x, WORLD_HEIGHT);
+    for (let y = 595; y <= WORLD_HEIGHT; y += 40) graphics.lineBetween(0, y, WORLD_WIDTH, y);
+
+    this.drawPlaneTree(graphics, 165, 260, daylight);
+    this.drawPlaneTree(graphics, 430, 258, daylight);
+    this.drawPlaneTree(graphics, 1880, 260, daylight);
+    this.drawPlaneTree(graphics, 2180, 258, daylight);
+    this.drawPlaneTree(graphics, 230, 1630, daylight);
+    this.drawPlaneTree(graphics, 510, 1680, daylight);
+    this.drawPlaneTree(graphics, 1940, 1660, daylight);
+    this.drawPlaneTree(graphics, 2200, 1640, daylight);
+    this.add.text(70, 630, 'RUE DES RÊVES', { color: daylight ? '#e9e3c9' : '#aeb9bc', fontFamily: 'monospace', fontSize: '15px', letterSpacing: 3 });
+    this.add.text(70, 657, '沿着法式梧桐街，走进 Dream Cafe', { color: daylight ? '#dce8df' : '#a6b2bb', fontFamily: 'monospace', fontSize: '12px' });
+  }
+
+  private placeCafeInWorld(cafeChildStart: number) {
+    this.children.list.slice(cafeChildStart).forEach((child) => {
+      const position = child as Phaser.GameObjects.GameObject & { x?: number; y?: number };
+      if (typeof position.x === 'number') position.x += CAFE_X;
+      if (typeof position.y === 'number') position.y += CAFE_Y;
+    });
+    this.offsetCoordinates(this.focusCoordinates);
+    this.offsetCoordinates(this.exitCoordinates);
+    this.obstacles = this.obstacles.map((obstacle) => ({ ...obstacle, x: obstacle.x + CAFE_X, y: obstacle.y + CAFE_Y }));
+  }
+
+  private offsetCoordinates(coordinates: Map<string, { x: number; y: number }>) {
+    coordinates.forEach((point, seatId) => coordinates.set(seatId, { x: point.x + CAFE_X, y: point.y + CAFE_Y }));
+  }
+
+  private setupCamera() {
+    const camera = this.cameras.main;
+    camera.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    camera.centerOn(this.player.x, this.player.y);
+    camera.startFollow(this.player, true, 0.09, 0.09);
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.dragStart = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY };
+      this.isCameraDragging = false;
+    });
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.isDown || !this.dragStart) return;
+      const dx = pointer.x - this.dragStart.x;
+      const dy = pointer.y - this.dragStart.y;
+      if (!this.isCameraDragging && Math.hypot(dx, dy) > 6) {
+        this.isCameraDragging = true;
+        camera.stopFollow();
+      }
+      if (!this.isCameraDragging) return;
+      const maxX = Math.max(0, WORLD_WIDTH - camera.width / camera.zoom);
+      const maxY = Math.max(0, WORLD_HEIGHT - camera.height / camera.zoom);
+      camera.setScroll(PhaserMath.Clamp(this.dragStart.scrollX - dx / camera.zoom, 0, maxX), PhaserMath.Clamp(this.dragStart.scrollY - dy / camera.zoom, 0, maxY));
+    });
+    const finishDrag = () => {
+      if (this.isCameraDragging) this.lastCameraDragAt = this.time.now;
+      this.dragStart = undefined;
+      this.isCameraDragging = false;
+    };
+    this.input.on('pointerup', finishDrag);
+    this.input.on('pointerupoutside', finishDrag);
   }
 
   private drawPlaneTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, daylight: boolean) {
@@ -347,12 +442,14 @@ export class CafeScene extends Scene {
     for (const spot of this.focusSpots) {
       const point = this.focusCoordinates.get(spot.seatId)!;
       const hotspot = this.add.circle(point.x, point.y, 46, 0xffffff, 0).setInteractive({ useHandCursor: true });
-      hotspot.on('pointerdown', () => {
-        if (!this.isFocusing) this.useFocusSpot(spot);
+      hotspot.on('pointerup', () => {
+        if (!this.isFocusing && this.time.now - this.lastCameraDragAt > 80) this.useFocusSpot(spot);
       });
     }
     const board = this.add.rectangle(1076, 325, 100, 168, 0xffffff, 0).setInteractive({ useHandCursor: true });
-    board.on('pointerdown', () => gameBridge.emit('tasks.open', undefined));
+    board.on('pointerup', () => {
+      if (this.time.now - this.lastCameraDragAt > 80) gameBridge.emit('tasks.open', undefined);
+    });
   }
 
   private addObstacle(x: number, y: number, width: number, height: number) {
@@ -360,11 +457,12 @@ export class CafeScene extends Scene {
   }
 
   private movePlayer(dx: number, dy: number) {
-    const x = PhaserMath.Clamp(this.player.x + dx, 146, WORLD_WIDTH - 88);
-    const y = PhaserMath.Clamp(this.player.y + dy, 82, WORLD_HEIGHT - 88);
+    const x = PhaserMath.Clamp(this.player.x + dx, PLAYER_SIZE, WORLD_WIDTH - PLAYER_SIZE);
+    const y = PhaserMath.Clamp(this.player.y + dy, PLAYER_SIZE, WORLD_HEIGHT - PLAYER_SIZE);
     if (this.collides(x, y)) return;
     this.player.setPosition(x, y);
     this.playerLabel.setPosition(x, y + 18);
+    this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
   }
 
   private collides(x: number, y: number) {
@@ -380,7 +478,7 @@ export class CafeScene extends Scene {
   }
 
   private isNearBoard() {
-    return Math.hypot(this.player.x - 1035, this.player.y - 325) < 90;
+    return Math.hypot(this.player.x - (1035 + CAFE_X), this.player.y - (325 + CAFE_Y)) < 90;
   }
 
   private useFocusSpot(spot: FocusSpot) {
