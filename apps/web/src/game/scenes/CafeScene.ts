@@ -25,7 +25,7 @@ export class CafeScene extends Scene {
     ['window-two-01', { x: 295, y: 310 }],
     ['window-four-01', { x: 316, y: 460 }],
     ['window-two-02', { x: 295, y: 610 }],
-    ['community-01', { x: 628, y: 445 }],
+    ['community-01', { x: 560, y: 470 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
@@ -125,9 +125,13 @@ export class CafeScene extends Scene {
     this.statusText = this.add.text(188, 720, '漫游中', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' });
     this.hintText = this.add.text(650, 720, '方向键 / WASD 移动 · 点击桌子或项目板', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' }).setOrigin(0.5, 0);
 
-    this.addObstacle(740, 116, 312, 104);
-    this.addObstacle(470, 392, 316, 74);
-    this.addObstacle(860, 410, 130, 156);
+    this.addObstacle(700, 100, 370, 80);
+    this.addObstacle(700, 160, 80, 150);
+    this.addObstacle(500, 300, 120, 320);
+    this.addObstacle(1018, 490, 88, 130);
+    this.addObstacle(850, 570, 105, 76);
+    this.addObstacle(850, 665, 105, 76);
+    this.addObstacle(970, 650, 115, 78);
     this.addObstacle(1042, 318, 60, 126);
     this.addObstacle(250, 275, 90, 54);
     this.addObstacle(250, 415, 132, 64);
@@ -161,17 +165,20 @@ export class CafeScene extends Scene {
 
   private drawNorthBar(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x483347, 1);
-    graphics.fillRoundedRect(730, 110, 342, 118, 8);
+    graphics.fillRoundedRect(700, 100, 370, 80, 8);
+    graphics.fillRoundedRect(700, 160, 80, 150, 8);
     graphics.fillStyle(0x82564e, 1);
-    graphics.fillRect(746, 130, 310, 22);
+    graphics.fillRect(718, 121, 334, 20);
+    graphics.fillRect(720, 160, 20, 132);
     graphics.fillStyle(0xf3be69, 1);
-    graphics.fillCircle(800, 172, 12);
-    graphics.fillCircle(878, 172, 12);
+    graphics.fillCircle(792, 151, 11);
+    graphics.fillCircle(860, 151, 11);
     graphics.fillStyle(0x263945, 1);
-    graphics.fillRect(950, 158, 78, 45);
+    graphics.fillRect(940, 138, 78, 30);
     graphics.fillStyle(0xd9d3c4, 1);
-    graphics.fillCircle(984, 180, 16);
-    this.add.text(804, 118, 'COFFEE BAR', { color: '#fff0ce', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 1 });
+    graphics.fillCircle(978, 153, 12);
+    graphics.fillCircle(749, 220, 10);
+    this.add.text(808, 106, 'COFFEE BAR', { color: '#fff0ce', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 1 });
   }
 
   private drawWestWindows(graphics: Phaser.GameObjects.Graphics, daylight: boolean, hour: number) {
@@ -203,15 +210,15 @@ export class CafeScene extends Scene {
 
   private drawCommunityTable(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x704940, 1);
-    graphics.fillRoundedRect(470, 385, 316, 72, 8);
+    graphics.fillRoundedRect(500, 300, 120, 320, 8);
     graphics.fillStyle(0xd19a68, 1);
-    graphics.fillRect(484, 397, 288, 14);
-    for (let x = 500; x < 764; x += 53) {
+    graphics.fillRect(512, 314, 14, 292);
+    for (let y = 330; y < 600; y += 52) {
       graphics.fillStyle(0x49333a, 1);
-      graphics.fillCircle(x, 370, 13);
-      graphics.fillCircle(x, 473, 13);
+      graphics.fillCircle(485, y, 13);
+      graphics.fillCircle(635, y, 13);
     }
-    this.add.text(558, 421, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 });
+    this.add.text(560, 460, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 }).setOrigin(0.5).setAngle(-90);
   }
 
   private drawWindowTables(graphics: Phaser.GameObjects.Graphics) {
@@ -237,31 +244,43 @@ export class CafeScene extends Scene {
 
   private drawFireplaceAndSofas(graphics: Phaser.GameObjects.Graphics, isNight: boolean) {
     graphics.fillStyle(0x483039, 1);
-    graphics.fillRoundedRect(1018, 404, 88, 130, 8);
+    graphics.fillRoundedRect(1018, 490, 88, 130, 8);
     graphics.fillStyle(0x2a2834, 1);
-    graphics.fillRect(1032, 432, 60, 64);
+    graphics.fillRect(1032, 518, 60, 64);
     if (isNight) {
       graphics.fillStyle(0xf46b3f, 1);
-      graphics.fillTriangle(1043, 485, 1062, 442, 1082, 485);
+      graphics.fillTriangle(1043, 571, 1062, 528, 1082, 571);
       graphics.fillStyle(0xffce66, 1);
-      graphics.fillTriangle(1051, 485, 1062, 458, 1074, 485);
+      graphics.fillTriangle(1051, 571, 1062, 544, 1074, 571);
     } else {
       graphics.fillStyle(0x8c5d42, 1);
-      graphics.fillRect(1040, 480, 44, 8);
+      graphics.fillRect(1040, 566, 44, 8);
     }
-    this.drawSofa(graphics, 865, 500, 120, 58);
-    this.drawSofa(graphics, 980, 555, 120, 58);
-    this.add.text(1018, 390, isNight ? '炉火正暖' : '壁炉', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
+    this.drawArmchair(graphics, 850, 570, 105, 76);
+    this.drawArmchair(graphics, 850, 665, 105, 76);
+    this.drawBeanBag(graphics, 970, 650, 115, 78);
+    this.add.text(1018, 476, isNight ? '炉火正暖' : '壁炉', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
   }
 
-  private drawSofa(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number) {
-    graphics.fillStyle(0x60726b, 1);
-    graphics.fillRoundedRect(x, y, width, height, 10);
-    graphics.fillStyle(0x96aa91, 1);
-    graphics.fillRoundedRect(x + 12, y + 12, width - 24, 22, 7);
-    graphics.fillStyle(0x47544f, 1);
-    graphics.fillRect(x + 15, y + height - 5, 10, 14);
-    graphics.fillRect(x + width - 25, y + height - 5, 10, 14);
+  private drawArmchair(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number) {
+    graphics.fillStyle(0x4f645f, 1);
+    graphics.fillRoundedRect(x, y, width, height, 16);
+    graphics.fillStyle(0x78938a, 1);
+    graphics.fillRoundedRect(x + 12, y + 12, width - 24, 29, 11);
+    graphics.fillStyle(0xa6bca8, 1);
+    graphics.fillRoundedRect(x + 19, y + 22, width - 38, 27, 10);
+    graphics.fillStyle(0x3e4f4b, 1);
+    graphics.fillRect(x + 13, y + height - 4, 10, 12);
+    graphics.fillRect(x + width - 23, y + height - 4, 10, 12);
+  }
+
+  private drawBeanBag(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number) {
+    graphics.fillStyle(0x7d677a, 1);
+    graphics.fillEllipse(x + width / 2, y + height / 2 + 4, width, height - 8);
+    graphics.fillStyle(0xb091aa, 1);
+    graphics.fillEllipse(x + width / 2 - 5, y + height / 2 - 7, width - 26, height - 28);
+    graphics.fillStyle(0xd7bdc7, 0.75);
+    graphics.fillEllipse(x + width / 2 - 14, y + height / 2 - 12, width - 60, height - 44);
   }
 
   private drawProjectBoard(graphics: Phaser.GameObjects.Graphics) {
@@ -280,7 +299,7 @@ export class CafeScene extends Scene {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
     this.add.text(292, 369, '慢慢来', { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
-    this.createPerson(840, 250, 0xd18ba5, 'Loopy', '调咖啡');
+    this.createPerson(850, 220, 0xd18ba5, 'Loopy', '调咖啡');
     this.createPerson(690, 500, 0x9ecc8b, 'Evan', '读报');
   }
 
