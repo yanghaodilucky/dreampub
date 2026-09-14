@@ -1,84 +1,68 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { PhaserGame } from '../game/PhaserGame';
 import { gameBridge, type FocusSpot } from '../game/bridge/GameBridge';
 
-type Task = { id: string; title: string; project: string; status: 'next' | 'done' };
 type Drawer = 'tasks' | 'focus' | null;
+type Project = { id: string; name: string; color: string; startDate: string; endDate: string };
+type Task = { id: string; projectId: string; title: string; status: 'next' | 'done'; startDate: string; endDate: string };
+type FocusSession = { id: string; taskId: string; projectId: string; startedAt: string; durationSeconds: number };
 
-const initialTasks: Task[] = [
-  { id: 'task-cafe', title: '完成 Dream Cafe 场景设计', project: 'DreamPub 首版', status: 'next' },
-  { id: 'task-memory', title: '整理 NPC 记忆设计', project: 'DreamPub 首版', status: 'next' },
-  { id: 'task-world-events', title: '确定 World Event 契约', project: 'DreamPub 首版', status: 'done' },
-];
+const COLORS = ['#f39a6b', '#8ac6a8', '#80b9dc', '#b89bd9', '#e8c26e', '#df8eb0'];
+const STORE = { projects: 'dreampub.projects', tasks: 'dreampub.tasks', sessions: 'dreampub.focus-sessions' };
+const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const addDays = (date: Date, days: number) => { const result = new Date(date); result.setDate(result.getDate() + days); return dateKey(result); };
+const dateValue = (value: string) => new Date(`${value}T00:00:00`).getTime();
+const formatDuration = (seconds: number) => `${Math.floor(seconds / 3600) ? `${Math.floor(seconds / 3600)}h ` : ''}${Math.floor((seconds % 3600) / 60)}m`;
+const dateLabel = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+function readStored<T>(key: string, fallback: T): T { try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; } }
+function seedProjects() { const today = new Date(); return [{ id: 'project-dreampub', name: 'DreamPub 首版', color: COLORS[0], startDate: addDays(today, -4), endDate: addDays(today, 18) }]; }
+function seedTasks(projectId: string) { const today = new Date(); return [{ id: 'task-cafe', projectId, title: '完成 Dream Cafe 场景设计', status: 'next' as const, startDate: addDays(today, -3), endDate: addDays(today, 4) }, { id: 'task-memory', projectId, title: '整理 NPC 记忆设计', status: 'next' as const, startDate: addDays(today, 5), endDate: addDays(today, 12) }, { id: 'task-world-events', projectId, title: '确定 World Event 契约', status: 'done' as const, startDate: addDays(today, -4), endDate: addDays(today, -1) }]; }
 
 export function App() {
-  const [tasks, setTasks] = useState(initialTasks);
+  const [projects, setProjects] = useState<Project[]>(() => readStored(STORE.projects, seedProjects()));
+  const [tasks, setTasks] = useState<Task[]>(() => readStored(STORE.tasks, seedTasks('project-dreampub')));
+  const [sessions, setSessions] = useState<FocusSession[]>(() => readStored(STORE.sessions, []));
+  const [selectedProjectId, setSelectedProjectId] = useState(() => projects[0]?.id ?? '');
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [focusSpot, setFocusSpot] = useState<FocusSpot | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [focusStartedAt, setFocusStartedAt] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gameError, setGameError] = useState<string | null>(null);
-
   const activeTask = useMemo(() => tasks.find((task) => task.id === activeTaskId) ?? null, [activeTaskId, tasks]);
   const remainingTasks = tasks.filter((task) => task.status === 'next');
-
+  useEffect(() => { window.localStorage.setItem(STORE.projects, JSON.stringify(projects)); }, [projects]);
+  useEffect(() => { window.localStorage.setItem(STORE.tasks, JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { window.localStorage.setItem(STORE.sessions, JSON.stringify(sessions)); }, [sessions]);
   useEffect(() => gameBridge.on('focus.open', (spot) => { setFocusSpot(spot); setDrawer('focus'); }), []);
   useEffect(() => gameBridge.on('tasks.open', () => setDrawer('tasks')), []);
   useEffect(() => gameBridge.on('game.error', ({ message }) => setGameError(message)), []);
-  useEffect(() => {
-    if (!focusStartedAt) return;
-    const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - focusStartedAt.getTime()) / 1000)), 1000);
-    return () => window.clearInterval(interval);
-  }, [focusStartedAt]);
-
-  const startFocus = (task: Task) => {
-    if (!focusSpot) return;
-    setActiveTaskId(task.id);
-    setFocusStartedAt(new Date());
-    setElapsedSeconds(0);
-    gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId });
-  };
-  const stopFocus = () => { gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
+  useEffect(() => { if (!focusStartedAt) return; const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - focusStartedAt.getTime()) / 1000)), 1000); return () => window.clearInterval(interval); }, [focusStartedAt]);
+  const startFocus = (task: Task) => { if (!focusSpot) return; setActiveTaskId(task.id); setFocusStartedAt(new Date()); setElapsedSeconds(0); gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId }); };
+  const stopFocus = () => { if (activeTask && focusStartedAt) setSessions((current) => [...current, { id: crypto.randomUUID(), taskId: activeTask.id, projectId: activeTask.projectId, startedAt: focusStartedAt.toISOString(), durationSeconds: Math.max(1, elapsedSeconds) }]); gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
   const leaveSeat = () => { gameBridge.emit('focus.leave', undefined); setFocusSpot(null); setDrawer(null); };
-  const addTask = () => {
-    const title = window.prompt('想专注完成什么？')?.trim();
-    if (title) setTasks((current) => [...current, { id: `task-${crypto.randomUUID()}`, title, project: 'DreamPub 首版', status: 'next' }]);
-  };
   const toggleTask = (taskId: string) => setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status: task.status === 'done' ? 'next' : 'done' } : task));
-
-  return <main className="cafe-shell">
-    <section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界">
-      <PhaserGame />
-      <header className="world-toolbar">
-        <a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a>
-        <p>西窗朝街 · 法式梧桐路边</p>
-        <div className="toolbar-actions">
-          <button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 任务</button>
-          <button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button>
-        </div>
-      </header>
-      <div className="world-caption"><span>● Loopy 在吧台调咖啡</span><span>● Evan 在中央长桌读报</span></div>
-      {gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}
-    </section>
-    {drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}
-    <aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}>
-      <div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT BOARD' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '今天的项目' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>
-      {drawer === 'tasks' && <TaskDrawer tasks={tasks} onAdd={addTask} onToggle={toggleTask} />}
-      {drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}
-    </aside>
-  </main>;
+  const addProject = (project: Omit<Project, 'id' | 'color'>) => { const item = { ...project, id: crypto.randomUUID(), color: COLORS[projects.length % COLORS.length] }; setProjects((current) => [...current, item]); setSelectedProjectId(item.id); };
+  const addTask = (task: Omit<Task, 'id' | 'status'>) => setTasks((current) => [...current, { ...task, id: crypto.randomUUID(), status: 'next' }]);
+  return <main className="cafe-shell"><section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界"><PhaserGame /><header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><p>西窗朝街 · 法式梧桐路边</p><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button></div></header><div className="world-caption"><span>● Loopy 在吧台调咖啡</span><span>● Evan 在中央长桌读报</span></div>{gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}</section>{drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}<aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside></main>;
 }
 
-function TaskDrawer({ tasks, onAdd, onToggle }: { tasks: Task[]; onAdd: () => void; onToggle: (taskId: string) => void }) {
-  const done = tasks.filter((task) => task.status === 'done').length;
-  return <><div className="project-card"><span>DreamPub 首版</span><strong>{done} / {tasks.length} 已完成</strong><small>右墙项目板和这里保持同一份任务。</small></div><button className="primary-button" onClick={onAdd}>+ 新增一个真实任务</button><ul className="task-list">{tasks.map((task) => <li key={task.id} className={task.status === 'done' ? 'done' : ''}><button className="task-check" onClick={() => onToggle(task.id)} aria-label={`切换 ${task.title} 状态`} /><div><strong>{task.title}</strong><small>{task.project}</small></div></li>)}</ul><p className="drawer-note">这是本地原型。下一阶段会将项目、任务和进度保存到服务器。</p></>;
+function ProjectDesk({ projects, tasks, sessions, selectedProjectId, onAddProject, onAddTask, onSelectProject, onToggleTask }: { projects: Project[]; tasks: Task[]; sessions: FocusSession[]; selectedProjectId: string; onAddProject: (project: Omit<Project, 'id' | 'color'>) => void; onAddTask: (task: Omit<Task, 'id' | 'status'>) => void; onSelectProject: (id: string) => void; onToggleTask: (id: string) => void }) {
+  const selected = projects.find((project) => project.id === selectedProjectId) ?? projects[0]; const projectTasks = tasks.filter((task) => task.projectId === selected?.id);
+  const [newProjectName, setNewProjectName] = useState(''); const [projectStart, setProjectStart] = useState(dateKey(new Date())); const [projectEnd, setProjectEnd] = useState(addDays(new Date(), 14)); const [newTask, setNewTask] = useState(''); const [taskStart, setTaskStart] = useState(selected?.startDate ?? dateKey(new Date())); const [taskEnd, setTaskEnd] = useState(selected?.endDate ?? addDays(new Date(), 3));
+  useEffect(() => { if (selected) { setTaskStart(selected.startDate); setTaskEnd(selected.endDate); } }, [selected?.id]);
+  const addProjectSubmit = (event: FormEvent) => { event.preventDefault(); if (!newProjectName.trim() || projectEnd < projectStart) return; onAddProject({ name: newProjectName.trim(), startDate: projectStart, endDate: projectEnd }); setNewProjectName(''); };
+  const addTaskSubmit = (event: FormEvent) => { event.preventDefault(); if (!selected || !newTask.trim() || taskEnd < taskStart) return; onAddTask({ projectId: selected.id, title: newTask.trim(), startDate: taskStart, endDate: taskEnd }); setNewTask(''); };
+  if (!selected) return null;
+  return <div className="project-desk"><section className="desk-section"><div className="section-heading"><h2>项目</h2><span>{projects.length} 个</span></div><div className="project-tabs">{projects.map((project) => <button className={project.id === selected.id ? 'project-tab active' : 'project-tab'} key={project.id} onClick={() => { onSelectProject(project.id); setTaskStart(project.startDate); setTaskEnd(project.endDate); }}><i style={{ background: project.color }} />{project.name}</button>)}</div><form className="inline-form project-form" onSubmit={addProjectSubmit}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="新项目名称" aria-label="新项目名称" /><label>开始<input type="date" value={projectStart} onChange={(event) => setProjectStart(event.target.value)} /></label><label>结束<input type="date" value={projectEnd} onChange={(event) => setProjectEnd(event.target.value)} /></label><button className="mini-primary">+ 项目</button></form></section><section className="desk-section selected-project"><div className="project-title"><i style={{ background: selected.color }} /><div><h2>{selected.name}</h2><p>{dateLabel(selected.startDate)} — {dateLabel(selected.endDate)}</p></div><strong>{projectTasks.filter((task) => task.status === 'done').length}/{projectTasks.length}</strong></div><form className="inline-form task-form" onSubmit={addTaskSubmit}><input value={newTask} onChange={(event) => setNewTask(event.target.value)} placeholder="为这个项目增加任务" aria-label="任务名称" /><label><input type="date" value={taskStart} onChange={(event) => setTaskStart(event.target.value)} /></label><label><input type="date" value={taskEnd} onChange={(event) => setTaskEnd(event.target.value)} /></label><button className="mini-primary">+ 任务</button></form><ul className="task-list">{projectTasks.map((task) => <li key={task.id} className={task.status === 'done' ? 'done' : ''}><button className="task-check" onClick={() => onToggleTask(task.id)} aria-label={`切换 ${task.title} 状态`} /><div><strong>{task.title}</strong><small>{dateLabel(task.startDate)} — {dateLabel(task.endDate)}</small></div></li>)}{!projectTasks.length && <li className="empty-row">这个项目还没有任务。</li>}</ul></section><GanttChart tasks={tasks} projects={projects} /><Analytics sessions={sessions} projects={projects} tasks={tasks} /></div>;
 }
 
-function FocusDrawer({ activeTask, elapsedSeconds, focusSpot, tasks, onLeave, onStop, onStart }: { activeTask: Task | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; onLeave: () => void; onStop: () => void; onStart: (task: Task) => void }) {
-  if (activeTask) return <div className="focus-active"><div className="focus-clock">{formatDuration(elapsedSeconds)}</div><p className="focus-label">正在专注</p><h2>{activeTask.title}</h2><p className="seat-label">你坐在{focusSpot?.label ?? 'Dream Cafe'}。</p><button className="secondary-button" onClick={onStop}>结束这次专注</button></div>;
-  if (!focusSpot) return <div className="empty-focus"><div className="coffee-mark">☕</div><h2>先选一张咖啡桌</h2><p>点击窗边桌、中央长桌，或走到旁边按 E。选座后，这里会显示你的任务。</p></div>;
-  return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择一个真实任务，计时和角色工作状态会立刻开始。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{task.project}</span>{task.title}</button>)}</div><button className="secondary-button leave-seat-button" onClick={onLeave}>离开座位</button></div>;
-}
+function GanttChart({ tasks, projects }: { tasks: Task[]; projects: Project[] }) { const allDates = [...projects.flatMap((project) => [project.startDate, project.endDate]), ...tasks.flatMap((task) => [task.startDate, task.endDate])]; const start = Math.min(...allDates.map(dateValue)); const end = Math.max(...allDates.map(dateValue)); const span = Math.max(1, Math.ceil((end - start) / 86_400_000) + 1); return <section className="desk-section gantt-section"><div className="section-heading"><h2>甘特图</h2><span>{dateLabel(dateKey(new Date(start)))} — {dateLabel(dateKey(new Date(end)))}</span></div><div className="gantt"><div className="gantt-scale"><span>开始</span><span>中段</span><span>结束</span></div>{tasks.map((task) => { const project = projects.find((item) => item.id === task.projectId); const left = ((dateValue(task.startDate) - start) / 86_400_000 / span) * 100; const width = Math.max(4, ((dateValue(task.endDate) - dateValue(task.startDate)) / 86_400_000 + 1) / span * 100); return <div className="gantt-row" key={task.id}><span title={task.title}>{task.title}</span><div className="gantt-track"><i style={{ left: `${left}%`, width: `${width}%`, background: project?.color }} /></div></div>; })}</div></section>; }
 
-function formatDuration(totalSeconds: number) { return `${Math.floor(totalSeconds / 60).toString().padStart(2, '0')}:${(totalSeconds % 60).toString().padStart(2, '0')}`; }
+function Analytics({ sessions, projects, tasks }: { sessions: FocusSession[]; projects: Project[]; tasks: Task[] }) { const today = dateKey(new Date()); const month = today.slice(0, 7); const daily = sessions.filter((session) => dateKey(new Date(session.startedAt)) === today); const monthly = sessions.filter((session) => dateKey(new Date(session.startedAt)).startsWith(month)); return <section className="desk-section analytics"><div className="section-heading"><h2>专注记录</h2><span>实际计时自动归档</span></div><div className="pie-grid"><PieCard title="今日 · 项目" records={daily} items={projects} getId={(item) => item.id} getName={(item) => item.name} getColor={(item) => item.color} /><PieCard title="今日 · 任务" records={daily} items={tasks} getId={(item) => item.id} getName={(item) => item.title} getColor={(item) => projects.find((project) => project.id === item.projectId)?.color ?? COLORS[0]} /><PieCard title="本月 · 项目" records={monthly} items={projects} getId={(item) => item.id} getName={(item) => item.name} getColor={(item) => item.color} /><PieCard title="本月 · 任务" records={monthly} items={tasks} getId={(item) => item.id} getName={(item) => item.title} getColor={(item) => projects.find((project) => project.id === item.projectId)?.color ?? COLORS[0]} /></div><ContributionHeatmap sessions={sessions} /></section>; }
+
+function PieCard<T extends { id: string }>({ title, records, items, getId, getName, getColor }: { title: string; records: FocusSession[]; items: T[]; getId: (item: T) => string; getName: (item: T) => string; getColor: (item: T) => string }) { const byId = new Map<string, number>(); records.forEach((record) => { const id = title.includes('项目') ? record.projectId : record.taskId; byId.set(id, (byId.get(id) ?? 0) + record.durationSeconds); }); const parts = items.map((item) => ({ name: getName(item), color: getColor(item), seconds: byId.get(getId(item)) ?? 0 })).filter((item) => item.seconds > 0); const total = parts.reduce((sum, item) => sum + item.seconds, 0); let offset = 0; return <article className="pie-card"><h3>{title}</h3><div className="pie-content"><svg viewBox="0 0 42 42" role="img" aria-label={`${title} 专注分布`}>{!total && <circle className="pie-empty" cx="21" cy="21" r="15.9" />}{parts.map((part) => { const value = part.seconds / total * 100; const circle = <circle key={part.name} cx="21" cy="21" r="15.9" fill="none" stroke={part.color} strokeWidth="5" strokeDasharray={`${value} ${100 - value}`} strokeDashoffset={-offset} transform="rotate(-90 21 21)" />; offset += value; return circle; })}<text x="21" y="22" textAnchor="middle">{formatDuration(total)}</text></svg><ul>{parts.slice(0, 2).map((part) => <li key={part.name}><i style={{ background: part.color }} />{part.name}<span>{formatDuration(part.seconds)}</span></li>)}{!parts.length && <li className="no-data">开始一次专注后生成</li>}</ul></div></article>; }
+
+function ContributionHeatmap({ sessions }: { sessions: FocusSession[] }) { const minutes = new Map<string, number>(); sessions.forEach((session) => { const day = dateKey(new Date(session.startedAt)); minutes.set(day, (minutes.get(day) ?? 0) + session.durationSeconds / 60); }); const today = new Date(); const days = Array.from({ length: 364 }, (_, index) => addDays(today, index - 363)); const intensity = (day: string) => { const value = minutes.get(day) ?? 0; return value === 0 ? 0 : value < 15 ? 1 : value < 45 ? 2 : value < 120 ? 3 : 4; }; const active = days.filter((day) => intensity(day) > 0); let streak = 0; let longest = 0; let current = 0; days.forEach((day) => { if (intensity(day)) { current += 1; longest = Math.max(longest, current); } else current = 0; }); for (let index = days.length - 1; index >= 0 && intensity(days[index]); index -= 1) streak += 1; const months = Array.from(new Set(days.map((day) => new Date(`${day}T00:00:00`).toLocaleDateString('zh-CN', { month: 'short' })))); return <div className="contribution"><div className="contribution-title"><h3>专注连续性</h3><span>{active.length} 个活跃日 · 连续 {streak} 天 · 最长 {longest} 天</span></div><div className="months">{months.map((month) => <span key={month}>{month}</span>)}</div><div className="heatmap">{days.map((day) => <i key={day} className={`heat-${intensity(day)}`} title={`${day} · ${Math.round(minutes.get(day) ?? 0)} 分钟`} />)}</div><div className="heat-legend"><span>少</span><i className="heat-0" /><i className="heat-1" /><i className="heat-2" /><i className="heat-3" /><i className="heat-4" /><span>多</span></div></div>; }
+
+function FocusDrawer({ activeTask, elapsedSeconds, focusSpot, tasks, projects, onLeave, onStop, onStart }: { activeTask: Task | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; projects: Project[]; onLeave: () => void; onStop: () => void; onStart: (task: Task) => void }) { if (activeTask) return <div className="focus-active"><div className="focus-clock">{formatDuration(elapsedSeconds)}</div><p className="focus-label">正在专注</p><h2>{activeTask.title}</h2><p className="seat-label">你坐在{focusSpot?.label ?? 'Dream Cafe'}。</p><button className="secondary-button" onClick={onStop}>结束这次专注并记录</button></div>; if (!focusSpot) return <div className="empty-focus"><div className="coffee-mark">☕</div><h2>先选一张咖啡桌</h2><p>点击窗边桌、中央长桌，或走到旁边按 E。选座后，这里会显示项目中的任务。</p></div>; return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择任务开始计时；结束时会自动写入项目、任务、日报和贡献格。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{projects.find((project) => project.id === task.projectId)?.name ?? '未分类项目'}</span>{task.title}</button>)}</div><button className="secondary-button leave-seat-button" onClick={onLeave}>离开座位</button></div>; }
