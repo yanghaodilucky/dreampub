@@ -24,18 +24,27 @@ export class CafeScene extends Scene {
     { seatId: 'window-four-01', label: '西窗四人桌' },
     { seatId: 'window-two-02', label: '西窗双人桌' },
     { seatId: 'community-01', label: '中央长桌' },
+    { seatId: 'fireplace-chair-01', label: '壁炉单人沙发' },
+    { seatId: 'fireplace-chair-02', label: '壁炉阅读沙发' },
+    { seatId: 'fireplace-beanbag-01', label: '壁炉懒人沙发' },
   ];
   private focusCoordinates = new Map<string, { x: number; y: number }>([
     ['window-two-01', { x: 295, y: 310 }],
     ['window-four-01', { x: 316, y: 460 }],
     ['window-two-02', { x: 295, y: 610 }],
     ['community-01', { x: 560, y: 450 }],
+    ['fireplace-chair-01', { x: 882, y: 548 }],
+    ['fireplace-chair-02', { x: 882, y: 640 }],
+    ['fireplace-beanbag-01', { x: 1007, y: 594 }],
   ]);
   private exitCoordinates = new Map<string, { x: number; y: number }>([
     ['window-two-01', { x: 385, y: 310 }],
     ['window-four-01', { x: 410, y: 460 }],
     ['window-two-02', { x: 385, y: 610 }],
     ['community-01', { x: 670, y: 450 }],
+    ['fireplace-chair-01', { x: 790, y: 548 }],
+    ['fireplace-chair-02', { x: 790, y: 640 }],
+    ['fireplace-beanbag-01', { x: 935, y: 660 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
@@ -164,9 +173,9 @@ export class CafeScene extends Scene {
     this.addObstacle(700, 250, 300, 70);
     this.addObstacle(500, 300, 120, 300);
     this.addObstacle(1018, 490, 88, 130);
-    this.addObstacle(850, 570, 105, 76);
-    this.addObstacle(850, 665, 105, 76);
-    this.addObstacle(970, 650, 115, 78);
+    this.addObstacle(830, 510, 105, 76);
+    this.addObstacle(830, 602, 105, 76);
+    this.addObstacle(950, 555, 115, 78);
     this.addObstacle(1042, 318, 60, 126);
     this.addObstacle(250, 275, 90, 54);
     this.addObstacle(250, 415, 132, 64);
@@ -387,9 +396,9 @@ export class CafeScene extends Scene {
       graphics.fillStyle(0x8c5d42, 1);
       graphics.fillRect(1040, 566, 44, 8);
     }
-    this.drawArmchair(graphics, 850, 570, 105, 76);
-    this.drawArmchair(graphics, 850, 665, 105, 76);
-    this.drawBeanBag(graphics, 970, 650, 115, 78);
+    this.drawArmchair(graphics, 830, 510, 105, 76);
+    this.drawArmchair(graphics, 830, 602, 105, 76);
+    this.drawBeanBag(graphics, 950, 555, 115, 78);
     this.add.text(1018, 476, isNight ? '炉火正暖' : '壁炉', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
   }
 
@@ -429,7 +438,6 @@ export class CafeScene extends Scene {
   private createPeople() {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    this.add.text(292, 369, '慢慢来', { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
     this.createPerson(850, 205, 0xd18ba5, 'Loopy', '调咖啡');
     this.createPerson(690, 500, 0x9ecc8b, 'Evan', '读报');
   }
@@ -478,7 +486,23 @@ export class CafeScene extends Scene {
 
   private collides(x: number, y: number) {
     const padding = PLAYER_SIZE / 2;
+    if (!this.canCrossCafeWall(x, y)) return true;
     return this.obstacles.some((obstacle) => x + padding > obstacle.x && x - padding < obstacle.x + obstacle.width && y + padding > obstacle.y && y - padding < obstacle.y + obstacle.height);
+  }
+
+  private canCrossCafeWall(nextX: number, nextY: number) {
+    const wasInside = this.isInCafe(this.player.x, this.player.y);
+    const willBeInside = this.isInCafe(nextX, nextY);
+    if (wasInside === willBeInside) return true;
+    return this.isAtCafeDoor(this.player.x, this.player.y) || this.isAtCafeDoor(nextX, nextY);
+  }
+
+  private isAtCafeDoor(x: number, y: number) {
+    const doorLeft = CAFE_X + 136 - PLAYER_SIZE;
+    const doorRight = CAFE_X + 163 + PLAYER_SIZE;
+    const doorTop = CAFE_Y + 132 - PLAYER_SIZE;
+    const doorBottom = CAFE_Y + 220 + PLAYER_SIZE;
+    return x >= doorLeft && x <= doorRight && y >= doorTop && y <= doorBottom;
   }
 
   private closestFocusSpot() {
@@ -513,6 +537,7 @@ export class CafeScene extends Scene {
     this.occupiedSeatId = null;
     this.isSitting = false;
     this.statusText.setText('已离开座位');
+    gameBridge.emit('focus.closed', undefined);
   }
 
   private startFocus(focus: FocusStarted) {
