@@ -51,7 +51,7 @@ export function App() {
       <PhaserGame />
       <header className="world-toolbar">
         <a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a>
-        <p>坐北朝南 · 法式梧桐路边</p>
+        <p>西窗朝街 · 法式梧桐路边</p>
         <div className="toolbar-actions">
           <button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 任务</button>
           <button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button>

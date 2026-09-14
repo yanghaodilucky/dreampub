@@ -4,7 +4,7 @@ import { gameBridge, type FocusStarted, type FocusSpot } from '../bridge/GameBri
 type Obstacle = { x: number; y: number; width: number; height: number };
 
 const WORLD_WIDTH = 1200;
-const WORLD_HEIGHT = 720;
+const WORLD_HEIGHT = 820;
 const PLAYER_SIZE = 22;
 
 export class CafeScene extends Scene {
@@ -16,16 +16,16 @@ export class CafeScene extends Scene {
   private wasd!: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
   private interactKey!: Phaser.Input.Keyboard.Key;
   private focusSpots: FocusSpot[] = [
-    { seatId: 'window-two-01', label: '南窗双人桌' },
-    { seatId: 'window-four-01', label: '南窗四人桌' },
-    { seatId: 'window-two-02', label: '南窗双人桌' },
+    { seatId: 'window-two-01', label: '西窗双人桌' },
+    { seatId: 'window-four-01', label: '西窗四人桌' },
+    { seatId: 'window-two-02', label: '西窗双人桌' },
     { seatId: 'community-01', label: '中央长桌' },
   ];
   private focusCoordinates = new Map<string, { x: number; y: number }>([
-    ['window-two-01', { x: 345, y: 515 }],
-    ['window-four-01', { x: 550, y: 515 }],
-    ['window-two-02', { x: 750, y: 515 }],
-    ['community-01', { x: 595, y: 360 }],
+    ['window-two-01', { x: 295, y: 310 }],
+    ['window-four-01', { x: 316, y: 460 }],
+    ['window-two-02', { x: 295, y: 610 }],
+    ['community-01', { x: 628, y: 445 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
@@ -86,53 +86,77 @@ export class CafeScene extends Scene {
     const phase = hour < 7 || hour >= 20 ? '夜晚' : hour < 11 ? '早晨' : hour < 16 ? '午后' : '傍晚';
 
     this.cameras.main.setBackgroundColor(daylight ? '#83b2c1' : '#182237');
-    graphics.fillStyle(daylight ? 0x839aa0 : 0x263246, 1);
-    graphics.fillRect(0, 0, 145, WORLD_HEIGHT);
-    graphics.lineStyle(2, daylight ? 0xb7c2b2 : 0x506078, 1);
-    for (let y = 0; y < WORLD_HEIGHT; y += 38) graphics.lineBetween(0, y, 145, y);
-    this.drawPlaneTree(graphics, 57, 165, daylight);
-    this.drawPlaneTree(graphics, 86, 505, daylight);
-    this.add.text(25, 48, 'RUE DES RÊVES', { color: '#edf0df', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 });
+    graphics.fillStyle(daylight ? 0x62787a : 0x263246, 1);
+    graphics.fillRect(0, 0, 104, WORLD_HEIGHT);
+    graphics.fillStyle(daylight ? 0xb9aa91 : 0x4b5160, 1);
+    graphics.fillRect(86, 0, 12, WORLD_HEIGHT);
+    graphics.fillStyle(daylight ? 0xdfd0ac : 0x677083, 1);
+    graphics.fillRect(99, 0, 5, WORLD_HEIGHT);
+    graphics.lineStyle(1, daylight ? 0x8e9b99 : 0x40516a, 0.9);
+    for (let y = 0; y < WORLD_HEIGHT; y += 22) {
+      graphics.lineBetween(7, y, 83, y);
+      if ((y / 22) % 2 === 0) graphics.lineBetween(45, y, 45, y + 22);
+    }
+    graphics.lineStyle(2, daylight ? 0xefdaaa : 0x5b6272, 0.85);
+    for (let y = 10; y < WORLD_HEIGHT; y += 56) graphics.lineBetween(48, y, 48, y + 25);
+    this.drawPlaneTree(graphics, 34, 166, daylight);
+    this.drawPlaneTree(graphics, 62, 430, daylight);
+    this.drawPlaneTree(graphics, 33, 700, daylight);
+    this.add.text(10, 48, 'RUE\nDES\nRÊVES', { color: '#edf0df', fontFamily: 'monospace', fontSize: '9px', lineSpacing: 2, letterSpacing: 1 });
 
     graphics.fillStyle(0x332728, 1);
-    graphics.fillRoundedRect(140, 55, 1020, 620, 10);
+    graphics.fillRoundedRect(104, 35, 1056, 750, 10);
     graphics.fillStyle(0xc78762, 1);
-    graphics.fillRect(166, 82, 968, 566);
+    graphics.fillRect(134, 65, 1000, 690);
     graphics.lineStyle(1, 0x9d614e, 0.62);
-    for (let x = 166; x < 1135; x += 35) graphics.lineBetween(x, 82, x, 648);
-    for (let y = 82; y < 649; y += 35) graphics.lineBetween(166, y, 1134, y);
+    for (let x = 134; x < 1135; x += 35) graphics.lineBetween(x, 65, x, 755);
+    for (let y = 65; y < 756; y += 35) graphics.lineBetween(134, y, 1134, y);
 
     this.drawNorthBar(graphics);
-    this.drawSouthWindows(graphics, daylight, hour);
+    this.drawWestWindows(graphics, daylight, hour);
     this.drawEntrance(graphics);
     this.drawCommunityTable(graphics);
     this.drawWindowTables(graphics);
     this.drawFireplaceAndSofas(graphics, hour >= 20 || hour < 7);
     this.drawProjectBoard(graphics);
 
-    this.add.text(188, 100, 'DREAM CAFE', { color: '#fff0ce', fontFamily: 'Georgia, serif', fontSize: '21px', fontStyle: 'bold', letterSpacing: 2 });
-    this.add.text(188, 126, `坐北朝南 · ${phase} · ${daylight ? '南窗日光' : '壁炉时间'}`, { color: '#653e3c', fontFamily: 'monospace', fontSize: '12px' });
-    this.statusText = this.add.text(188, 620, '漫游中', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' });
-    this.hintText = this.add.text(650, 620, '方向键 / WASD 移动 · 点击桌子或项目板', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' }).setOrigin(0.5, 0);
+    this.add.text(188, 90, 'DREAM CAFE', { color: '#fff0ce', fontFamily: 'Georgia, serif', fontSize: '21px', fontStyle: 'bold', letterSpacing: 2 });
+    this.add.text(188, 116, `西窗朝街 · ${phase} · ${daylight ? '窗边日光' : '壁炉时间'}`, { color: '#653e3c', fontFamily: 'monospace', fontSize: '12px' });
+    this.statusText = this.add.text(188, 720, '漫游中', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' });
+    this.hintText = this.add.text(650, 720, '方向键 / WASD 移动 · 点击桌子或项目板', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' }).setOrigin(0.5, 0);
 
     this.addObstacle(740, 116, 312, 104);
-    this.addObstacle(470, 307, 316, 74);
+    this.addObstacle(470, 392, 316, 74);
     this.addObstacle(860, 410, 130, 156);
     this.addObstacle(1042, 318, 60, 126);
-    this.addObstacle(305, 486, 90, 48);
-    this.addObstacle(492, 476, 132, 58);
-    this.addObstacle(710, 486, 90, 48);
+    this.addObstacle(250, 275, 90, 54);
+    this.addObstacle(250, 415, 132, 64);
+    this.addObstacle(250, 575, 90, 54);
   }
 
   private drawPlaneTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, daylight: boolean) {
-    graphics.fillStyle(0x5e493a, 1);
-    graphics.fillRect(x - 8, y - 42, 16, 88);
-    graphics.fillStyle(daylight ? 0x496d4b : 0x334e51, 1);
-    graphics.fillCircle(x - 18, y - 55, 28);
-    graphics.fillCircle(x + 18, y - 62, 31);
-    graphics.fillCircle(x + 4, y - 89, 32);
-    graphics.fillStyle(daylight ? 0x8ca967 : 0x506d60, 1);
-    graphics.fillCircle(x - 6, y - 83, 20);
+    const leaves = daylight ? [0x37594c, 0x4e704f, 0x6f8f59, 0x9aae67] : [0x263d47, 0x304a4d, 0x3c5b54, 0x566f5d];
+    graphics.fillStyle(daylight ? 0x48504b : 0x28313c, 0.28);
+    graphics.fillEllipse(x + 15, y + 48, 58, 13);
+    graphics.fillStyle(0x56433a, 1);
+    graphics.fillRect(x - 4, y - 51, 9, 99);
+    graphics.fillStyle(0x80604a, 1);
+    graphics.fillRect(x + 2, y - 49, 3, 96);
+    graphics.lineStyle(3, 0x56433a, 1);
+    graphics.lineBetween(x, y - 18, x - 22, y - 62);
+    graphics.lineBetween(x + 3, y - 28, x + 27, y - 67);
+    graphics.lineBetween(x, y - 45, x - 7, y - 84);
+    const clusters = [[-18, -69, 18], [5, -88, 20], [24, -69, 17], [-2, -105, 17], [-26, -91, 13], [29, -94, 13], [8, -59, 18]];
+    clusters.forEach(([offsetX, offsetY, radius], index) => {
+      graphics.fillStyle(leaves[index % leaves.length], 1);
+      graphics.fillCircle(x + offsetX, y + offsetY, radius);
+      graphics.fillStyle(leaves[(index + 2) % leaves.length], 0.8);
+      graphics.fillCircle(x + offsetX - radius * 0.28, y + offsetY - radius * 0.3, radius * 0.42);
+    });
+    graphics.fillStyle(daylight ? 0xd8c57b : 0x6d7a67, 0.75);
+    graphics.fillCircle(x - 11, y - 101, 3);
+    graphics.fillCircle(x + 21, y - 78, 2);
+    graphics.fillCircle(x - 27, y - 75, 2);
   }
 
   private drawNorthBar(graphics: Phaser.GameObjects.Graphics) {
@@ -150,54 +174,50 @@ export class CafeScene extends Scene {
     this.add.text(804, 118, 'COFFEE BAR', { color: '#fff0ce', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 1 });
   }
 
-  private drawSouthWindows(graphics: Phaser.GameObjects.Graphics, daylight: boolean, hour: number) {
-    const windows = [218, 356, 646, 785];
+  private drawWestWindows(graphics: Phaser.GameObjects.Graphics, daylight: boolean, hour: number) {
+    const windows = [252, 402, 552];
     graphics.fillStyle(daylight ? 0x8fc7d0 : 0x253954, 1);
-    for (const x of windows) {
-      graphics.fillRoundedRect(x, 560, 105, 54, 4);
+    for (const y of windows) {
+      graphics.fillRoundedRect(136, y, 48, 104, 4);
       graphics.lineStyle(2, 0xf5e0b5, 0.9);
-      graphics.lineBetween(x + 52, 564, x + 52, 610);
+      graphics.lineBetween(140, y + 52, 180, y + 52);
+      graphics.lineBetween(160, y + 4, 160, y + 100);
     }
 
     if (daylight) {
-      const shift = hour < 11 ? -100 : hour < 16 ? 0 : 100;
+      const shift = hour < 11 ? -85 : hour < 16 ? 0 : 85;
       graphics.fillStyle(0xffdc8a, 0.14);
-      for (const x of windows) {
-        graphics.fillTriangle(x + 12, 558, x + 92, 558, x + 52 + shift, 395);
+      for (const y of windows) {
+        graphics.fillTriangle(186, y + 14, 186, y + 90, 392, y + 52 + shift);
       }
     }
   }
 
   private drawEntrance(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x25313b, 1);
-    graphics.fillRect(167, 154, 25, 84);
+    graphics.fillRect(136, 132, 27, 88);
     graphics.fillStyle(0xf0cd91, 1);
-    graphics.fillRect(174, 160, 11, 70);
-    this.add.text(198, 190, '侧入口', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
-    graphics.fillStyle(0x25313b, 1);
-    graphics.fillRect(475, 612, 155, 36);
-    graphics.lineStyle(2, 0xf5e0b5, 0.8);
-    graphics.lineBetween(552, 614, 552, 647);
-    this.add.text(500, 598, '南侧主门', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
+    graphics.fillRect(143, 139, 12, 74);
+    this.add.text(174, 170, '入口', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
   }
 
   private drawCommunityTable(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x704940, 1);
-    graphics.fillRoundedRect(470, 300, 316, 72, 8);
+    graphics.fillRoundedRect(470, 385, 316, 72, 8);
     graphics.fillStyle(0xd19a68, 1);
-    graphics.fillRect(484, 312, 288, 14);
+    graphics.fillRect(484, 397, 288, 14);
     for (let x = 500; x < 764; x += 53) {
       graphics.fillStyle(0x49333a, 1);
-      graphics.fillCircle(x, 285, 13);
-      graphics.fillCircle(x, 388, 13);
+      graphics.fillCircle(x, 370, 13);
+      graphics.fillCircle(x, 473, 13);
     }
-    this.add.text(558, 336, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 });
+    this.add.text(558, 421, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 });
   }
 
   private drawWindowTables(graphics: Phaser.GameObjects.Graphics) {
-    this.drawTable(graphics, 305, 478, 90, 54, '2');
-    this.drawTable(graphics, 492, 468, 132, 64, '4');
-    this.drawTable(graphics, 710, 478, 90, 54, '2');
+    this.drawTable(graphics, 250, 275, 90, 54, '2');
+    this.drawTable(graphics, 250, 415, 132, 64, '4');
+    this.drawTable(graphics, 250, 575, 90, 54, '2');
   }
 
   private drawTable(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, capacity: string) {
@@ -261,7 +281,7 @@ export class CafeScene extends Scene {
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
     this.add.text(292, 369, '慢慢来', { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
     this.createPerson(840, 250, 0xd18ba5, 'Loopy', '调咖啡');
-    this.createPerson(690, 414, 0x9ecc8b, 'Evan', '读报');
+    this.createPerson(690, 500, 0x9ecc8b, 'Evan', '读报');
   }
 
   private createPerson(x: number, y: number, color: number, name: string, activity: string) {
@@ -295,8 +315,8 @@ export class CafeScene extends Scene {
   }
 
   private movePlayer(dx: number, dy: number) {
-    const x = PhaserMath.Clamp(this.player.x + dx, 177, WORLD_WIDTH - 88);
-    const y = PhaserMath.Clamp(this.player.y + dy, 105, WORLD_HEIGHT - 88);
+    const x = PhaserMath.Clamp(this.player.x + dx, 146, WORLD_WIDTH - 88);
+    const y = PhaserMath.Clamp(this.player.y + dy, 82, WORLD_HEIGHT - 88);
     if (this.collides(x, y)) return;
     this.player.setPosition(x, y);
     this.playerLabel.setPosition(x, y + 18);

@@ -6,7 +6,7 @@ export const createGame = (parent: string) => new Game({
   // Phaser's scene and input APIs remain the same when we later choose WebGL for effects.
   type: CANVAS,
   width: 1200,
-  height: 720,
+  height: 820,
   parent,
   backgroundColor: '#1d2030',
   pixelArt: true,
