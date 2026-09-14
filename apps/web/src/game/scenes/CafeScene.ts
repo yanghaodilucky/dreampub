@@ -25,12 +25,21 @@ export class CafeScene extends Scene {
     ['window-two-01', { x: 295, y: 310 }],
     ['window-four-01', { x: 316, y: 460 }],
     ['window-two-02', { x: 295, y: 610 }],
-    ['community-01', { x: 560, y: 470 }],
+    ['community-01', { x: 560, y: 450 }],
+  ]);
+  private exitCoordinates = new Map<string, { x: number; y: number }>([
+    ['window-two-01', { x: 385, y: 310 }],
+    ['window-four-01', { x: 410, y: 460 }],
+    ['window-two-02', { x: 385, y: 610 }],
+    ['community-01', { x: 670, y: 450 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
+  private isSitting = false;
   private isFocusing = false;
+  private worldTimeMode = '';
   private unsubscribeFocus?: () => void;
+  private unsubscribeLeave?: () => void;
   private unsubscribeStopped?: () => void;
 
   constructor() {
@@ -39,13 +48,22 @@ export class CafeScene extends Scene {
 
   create() {
     try {
+      this.worldTimeMode = this.getWorldTimeMode();
       this.drawCafe();
       this.createPeople();
       this.createInput();
       this.createHotspots();
       this.unsubscribeFocus = gameBridge.on('focus.started', (focus) => this.startFocus(focus));
+      this.unsubscribeLeave = gameBridge.on('focus.leave', () => this.leaveSeat());
       this.unsubscribeStopped = gameBridge.on('focus.stopped', () => this.stopFocus());
       this.events.once(Scenes.Events.SHUTDOWN, this.cleanUp, this);
+      this.time.addEvent({
+        delay: 60_000,
+        loop: true,
+        callback: () => {
+          if (this.getWorldTimeMode() !== this.worldTimeMode) this.scene.restart();
+        },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown scene setup error';
       gameBridge.emit('game.error', { message });
@@ -63,6 +81,12 @@ export class CafeScene extends Scene {
     if (this.cursors.right.isDown || this.wasd.D.isDown) dx += speed;
     if (this.cursors.up.isDown || this.wasd.W.isDown) dy -= speed;
     if (this.cursors.down.isDown || this.wasd.S.isDown) dy += speed;
+    const isMoving = dx !== 0 || dy !== 0;
+    const interactPressed = Input.Keyboard.JustDown(this.interactKey);
+    if (this.isSitting && (isMoving || interactPressed)) {
+      this.leaveSeat();
+      if (!isMoving) return;
+    }
     if (dx || dy) {
       const length = Math.hypot(dx, dy);
       this.movePlayer((dx / length) * speed, (dy / length) * speed);
@@ -71,9 +95,9 @@ export class CafeScene extends Scene {
     const closest = this.closestFocusSpot();
     const boardNearby = this.isNearBoard();
     this.hintText.setText(
-      boardNearby ? '按 E 打开右墙项目板' : closest ? `按 E 坐到${closest.label}` : '方向键 / WASD 移动 · 点击桌子或项目板',
+      this.isSitting ? '按方向键 / E 离开座位' : boardNearby ? '按 E 打开右墙项目板' : closest ? `按 E 坐到${closest.label}` : '方向键 / WASD 移动 · 点击桌子或项目板',
     );
-    if (Input.Keyboard.JustDown(this.interactKey)) {
+    if (interactPressed) {
       if (boardNearby) gameBridge.emit('tasks.open', undefined);
       else if (closest) this.useFocusSpot(closest);
     }
@@ -83,7 +107,7 @@ export class CafeScene extends Scene {
     const graphics = this.add.graphics();
     const hour = new Date().getHours();
     const daylight = hour >= 7 && hour < 18;
-    const phase = hour < 7 || hour >= 20 ? '夜晚' : hour < 11 ? '早晨' : hour < 16 ? '午后' : '傍晚';
+    const phase = daylight ? hour < 11 ? '早晨' : hour < 16 ? '午后' : '傍晚' : '夜晚';
 
     this.cameras.main.setBackgroundColor(daylight ? '#83b2c1' : '#182237');
     graphics.fillStyle(daylight ? 0x62787a : 0x263246, 1);
@@ -117,7 +141,7 @@ export class CafeScene extends Scene {
     this.drawEntrance(graphics);
     this.drawCommunityTable(graphics);
     this.drawWindowTables(graphics);
-    this.drawFireplaceAndSofas(graphics, hour >= 20 || hour < 7);
+    this.drawFireplaceAndSofas(graphics, !daylight);
     this.drawProjectBoard(graphics);
 
     this.add.text(188, 90, 'DREAM CAFE', { color: '#fff0ce', fontFamily: 'Georgia, serif', fontSize: '21px', fontStyle: 'bold', letterSpacing: 2 });
@@ -125,9 +149,9 @@ export class CafeScene extends Scene {
     this.statusText = this.add.text(188, 720, '漫游中', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' });
     this.hintText = this.add.text(650, 720, '方向键 / WASD 移动 · 点击桌子或项目板', { color: '#623e3c', fontFamily: 'monospace', fontSize: '13px' }).setOrigin(0.5, 0);
 
-    this.addObstacle(700, 100, 370, 80);
-    this.addObstacle(700, 160, 80, 150);
-    this.addObstacle(500, 300, 120, 320);
+    this.addObstacle(700, 100, 80, 220);
+    this.addObstacle(700, 250, 300, 70);
+    this.addObstacle(500, 300, 120, 300);
     this.addObstacle(1018, 490, 88, 130);
     this.addObstacle(850, 570, 105, 76);
     this.addObstacle(850, 665, 105, 76);
@@ -165,20 +189,20 @@ export class CafeScene extends Scene {
 
   private drawNorthBar(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x483347, 1);
-    graphics.fillRoundedRect(700, 100, 370, 80, 8);
-    graphics.fillRoundedRect(700, 160, 80, 150, 8);
+    graphics.fillRoundedRect(700, 100, 80, 220, 8);
+    graphics.fillRoundedRect(700, 250, 300, 70, 8);
     graphics.fillStyle(0x82564e, 1);
-    graphics.fillRect(718, 121, 334, 20);
-    graphics.fillRect(720, 160, 20, 132);
+    graphics.fillRect(720, 120, 20, 180);
+    graphics.fillRect(718, 268, 264, 20);
     graphics.fillStyle(0xf3be69, 1);
-    graphics.fillCircle(792, 151, 11);
-    graphics.fillCircle(860, 151, 11);
+    graphics.fillCircle(820, 298, 11);
+    graphics.fillCircle(890, 298, 11);
     graphics.fillStyle(0x263945, 1);
-    graphics.fillRect(940, 138, 78, 30);
+    graphics.fillRect(904, 268, 62, 34);
     graphics.fillStyle(0xd9d3c4, 1);
-    graphics.fillCircle(978, 153, 12);
-    graphics.fillCircle(749, 220, 10);
-    this.add.text(808, 106, 'COFFEE BAR', { color: '#fff0ce', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 1 });
+    graphics.fillCircle(936, 285, 12);
+    graphics.fillCircle(750, 210, 10);
+    this.add.text(800, 278, 'COFFEE BAR', { color: '#fff0ce', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 1 });
   }
 
   private drawWestWindows(graphics: Phaser.GameObjects.Graphics, daylight: boolean, hour: number) {
@@ -210,15 +234,15 @@ export class CafeScene extends Scene {
 
   private drawCommunityTable(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x704940, 1);
-    graphics.fillRoundedRect(500, 300, 120, 320, 8);
+    graphics.fillRoundedRect(500, 300, 120, 300, 8);
     graphics.fillStyle(0xd19a68, 1);
-    graphics.fillRect(512, 314, 14, 292);
-    for (let y = 330; y < 600; y += 52) {
+    graphics.fillRect(512, 314, 14, 272);
+    for (let y = 340; y < 580; y += 70) {
       graphics.fillStyle(0x49333a, 1);
       graphics.fillCircle(485, y, 13);
       graphics.fillCircle(635, y, 13);
     }
-    this.add.text(560, 460, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 }).setOrigin(0.5).setAngle(-90);
+    this.add.text(560, 450, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 }).setOrigin(0.5).setAngle(-90);
   }
 
   private drawWindowTables(graphics: Phaser.GameObjects.Graphics) {
@@ -233,13 +257,15 @@ export class CafeScene extends Scene {
     graphics.fillStyle(0xe4b16f, 1);
     graphics.fillRect(x + 8, y + 8, width - 16, 12);
     graphics.fillStyle(0x4a3339, 1);
-    graphics.fillCircle(x + 20, y + height + 9, 12);
-    graphics.fillCircle(x + width - 20, y + height + 9, 12);
-    if (capacity === '4') {
+    if (capacity === '2') {
+      graphics.fillCircle(x + width / 2, y - 8, 12);
+      graphics.fillCircle(x + width / 2, y + height + 9, 12);
+    } else {
+      graphics.fillCircle(x + 20, y + height + 9, 12);
+      graphics.fillCircle(x + width - 20, y + height + 9, 12);
       graphics.fillCircle(x + 20, y - 8, 12);
       graphics.fillCircle(x + width - 20, y - 8, 12);
     }
-    this.add.text(x + width / 2, y + 29, `${capacity}人桌`, { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '11px' }).setOrigin(0.5, 0);
   }
 
   private drawFireplaceAndSofas(graphics: Phaser.GameObjects.Graphics, isNight: boolean) {
@@ -299,7 +325,7 @@ export class CafeScene extends Scene {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
     this.add.text(292, 369, '慢慢来', { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
-    this.createPerson(850, 220, 0xd18ba5, 'Loopy', '调咖啡');
+    this.createPerson(850, 205, 0xd18ba5, 'Loopy', '调咖啡');
     this.createPerson(690, 500, 0x9ecc8b, 'Evan', '读报');
   }
 
@@ -360,10 +386,23 @@ export class CafeScene extends Scene {
   private useFocusSpot(spot: FocusSpot) {
     const point = this.focusCoordinates.get(spot.seatId)!;
     this.occupiedSeatId = spot.seatId;
+    this.isSitting = true;
     this.player.setPosition(point.x, point.y);
     this.playerLabel.setPosition(point.x, point.y + 18);
     this.statusText.setText(`已坐在${spot.label}`);
     gameBridge.emit('focus.open', spot);
+  }
+
+  private leaveSeat() {
+    if (!this.isSitting || this.isFocusing) return;
+    const exit = this.occupiedSeatId ? this.exitCoordinates.get(this.occupiedSeatId) : undefined;
+    if (exit) {
+      this.player.setPosition(exit.x, exit.y);
+      this.playerLabel.setPosition(exit.x, exit.y + 18);
+    }
+    this.occupiedSeatId = null;
+    this.isSitting = false;
+    this.statusText.setText('已离开座位');
   }
 
   private startFocus(focus: FocusStarted) {
@@ -382,6 +421,15 @@ export class CafeScene extends Scene {
 
   private cleanUp() {
     this.unsubscribeFocus?.();
+    this.unsubscribeLeave?.();
     this.unsubscribeStopped?.();
+  }
+
+  private getWorldTimeMode() {
+    const hour = new Date().getHours();
+    if (hour < 7 || hour >= 18) return 'night';
+    if (hour < 11) return 'morning';
+    if (hour < 16) return 'afternoon';
+    return 'evening';
   }
 }

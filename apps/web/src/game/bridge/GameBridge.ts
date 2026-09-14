@@ -3,6 +3,7 @@ export type FocusStarted = { taskId: string; taskTitle: string; seatId: string }
 
 type BridgeEvents = {
   'focus.open': FocusSpot | null;
+  'focus.leave': undefined;
   'tasks.open': undefined;
   'focus.started': FocusStarted;
   'focus.stopped': undefined;

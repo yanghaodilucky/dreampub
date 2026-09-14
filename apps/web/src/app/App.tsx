@@ -40,6 +40,7 @@ export function App() {
     gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId });
   };
   const stopFocus = () => { gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
+  const leaveSeat = () => { gameBridge.emit('focus.leave', undefined); setFocusSpot(null); setDrawer(null); };
   const addTask = () => {
     const title = window.prompt('想专注完成什么？')?.trim();
     if (title) setTasks((current) => [...current, { id: `task-${crypto.randomUUID()}`, title, project: 'DreamPub 首版', status: 'next' }]);
@@ -64,7 +65,7 @@ export function App() {
     <aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}>
       <div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT BOARD' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '今天的项目' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>
       {drawer === 'tasks' && <TaskDrawer tasks={tasks} onAdd={addTask} onToggle={toggleTask} />}
-      {drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} onStop={stopFocus} onStart={startFocus} />}
+      {drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}
     </aside>
   </main>;
 }
@@ -74,10 +75,10 @@ function TaskDrawer({ tasks, onAdd, onToggle }: { tasks: Task[]; onAdd: () => vo
   return <><div className="project-card"><span>DreamPub 首版</span><strong>{done} / {tasks.length} 已完成</strong><small>右墙项目板和这里保持同一份任务。</small></div><button className="primary-button" onClick={onAdd}>+ 新增一个真实任务</button><ul className="task-list">{tasks.map((task) => <li key={task.id} className={task.status === 'done' ? 'done' : ''}><button className="task-check" onClick={() => onToggle(task.id)} aria-label={`切换 ${task.title} 状态`} /><div><strong>{task.title}</strong><small>{task.project}</small></div></li>)}</ul><p className="drawer-note">这是本地原型。下一阶段会将项目、任务和进度保存到服务器。</p></>;
 }
 
-function FocusDrawer({ activeTask, elapsedSeconds, focusSpot, tasks, onStop, onStart }: { activeTask: Task | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; onStop: () => void; onStart: (task: Task) => void }) {
+function FocusDrawer({ activeTask, elapsedSeconds, focusSpot, tasks, onLeave, onStop, onStart }: { activeTask: Task | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; onLeave: () => void; onStop: () => void; onStart: (task: Task) => void }) {
   if (activeTask) return <div className="focus-active"><div className="focus-clock">{formatDuration(elapsedSeconds)}</div><p className="focus-label">正在专注</p><h2>{activeTask.title}</h2><p className="seat-label">你坐在{focusSpot?.label ?? 'Dream Cafe'}。</p><button className="secondary-button" onClick={onStop}>结束这次专注</button></div>;
   if (!focusSpot) return <div className="empty-focus"><div className="coffee-mark">☕</div><h2>先选一张咖啡桌</h2><p>点击窗边桌、中央长桌，或走到旁边按 E。选座后，这里会显示你的任务。</p></div>;
-  return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择一个真实任务，计时和角色工作状态会立刻开始。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{task.project}</span>{task.title}</button>)}</div></div>;
+  return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择一个真实任务，计时和角色工作状态会立刻开始。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{task.project}</span>{task.title}</button>)}</div><button className="secondary-button leave-seat-button" onClick={onLeave}>离开座位</button></div>;
 }
 
 function formatDuration(totalSeconds: number) { return `${Math.floor(totalSeconds / 60).toString().padStart(2, '0')}:${(totalSeconds % 60).toString().padStart(2, '0')}`; }
