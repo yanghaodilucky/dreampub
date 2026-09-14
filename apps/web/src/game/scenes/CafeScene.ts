@@ -228,8 +228,7 @@ export class CafeScene extends Scene {
   private setupCamera() {
     const camera = this.cameras.main;
     camera.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    camera.centerOn(this.player.x, this.player.y);
-    camera.startFollow(this.player, true, 0.09, 0.09);
+    this.lockCameraToCafe();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.dragStart = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY };
@@ -237,6 +236,7 @@ export class CafeScene extends Scene {
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (!pointer.isDown || !this.dragStart) return;
+      if (this.isInCafe(this.player.x, this.player.y)) return;
       const dx = pointer.x - this.dragStart.x;
       const dy = pointer.y - this.dragStart.y;
       if (!this.isCameraDragging && Math.hypot(dx, dy) > 6) {
@@ -255,6 +255,16 @@ export class CafeScene extends Scene {
     };
     this.input.on('pointerup', finishDrag);
     this.input.on('pointerupoutside', finishDrag);
+  }
+
+  private lockCameraToCafe() {
+    const camera = this.cameras.main;
+    camera.stopFollow();
+    camera.centerOn(CAFE_X + CAFE_WIDTH / 2, CAFE_Y + CAFE_HEIGHT / 2);
+  }
+
+  private isInCafe(x: number, y: number) {
+    return x >= CAFE_X + 104 && x <= CAFE_X + CAFE_WIDTH - 40 && y >= CAFE_Y + 35 && y <= CAFE_Y + CAFE_HEIGHT - 35;
   }
 
   private drawPlaneTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, daylight: boolean) {
@@ -462,7 +472,8 @@ export class CafeScene extends Scene {
     if (this.collides(x, y)) return;
     this.player.setPosition(x, y);
     this.playerLabel.setPosition(x, y + 18);
-    this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
+    if (this.isInCafe(x, y)) this.lockCameraToCafe();
+    else this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
   }
 
   private collides(x: number, y: number) {
@@ -487,6 +498,7 @@ export class CafeScene extends Scene {
     this.isSitting = true;
     this.player.setPosition(point.x, point.y);
     this.playerLabel.setPosition(point.x, point.y + 18);
+    this.lockCameraToCafe();
     this.statusText.setText(`已坐在${spot.label}`);
     gameBridge.emit('focus.open', spot);
   }
