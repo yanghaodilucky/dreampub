@@ -20,31 +20,45 @@ export class CafeScene extends Scene {
   private wasd!: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
   private interactKey!: Phaser.Input.Keyboard.Key;
   private focusSpots: FocusSpot[] = [
-    { seatId: 'window-two-01', label: '西窗双人桌' },
-    { seatId: 'window-four-01', label: '西窗四人桌' },
-    { seatId: 'window-two-02', label: '西窗双人桌' },
-    { seatId: 'community-01', label: '中央长桌' },
+    { seatId: 'window-two-01-north', label: '西窗双人桌靠窗椅' },
+    { seatId: 'window-two-01-south', label: '西窗双人桌朝内椅' },
+    { seatId: 'window-four-01-north-west', label: '西窗四人桌靠窗椅' },
+    { seatId: 'window-four-01-north-east', label: '西窗四人桌靠窗椅' },
+    { seatId: 'window-four-01-south-west', label: '西窗四人桌朝内椅' },
+    { seatId: 'window-four-01-south-east', label: '西窗四人桌朝内椅' },
+    { seatId: 'window-two-02-north', label: '西窗双人桌靠窗椅' },
+    { seatId: 'window-two-02-south', label: '西窗双人桌朝内椅' },
+    ...['340', '410', '480', '550'].flatMap((y) => [
+      { seatId: `community-left-${y}`, label: '中央多人桌左侧椅' },
+      { seatId: `community-right-${y}`, label: '中央多人桌右侧椅' },
+    ]),
     { seatId: 'fireplace-chair-01', label: '壁炉单人沙发' },
     { seatId: 'fireplace-chair-02', label: '壁炉阅读沙发' },
     { seatId: 'fireplace-beanbag-01', label: '壁炉懒人沙发' },
   ];
   private focusCoordinates = new Map<string, { x: number; y: number }>([
-    ['window-two-01', { x: 295, y: 310 }],
-    ['window-four-01', { x: 316, y: 460 }],
-    ['window-two-02', { x: 295, y: 610 }],
-    ['community-01', { x: 560, y: 450 }],
-    ['fireplace-chair-01', { x: 872, y: 528 }],
-    ['fireplace-chair-02', { x: 872, y: 668 }],
-    ['fireplace-beanbag-01', { x: 1027, y: 689 }],
+    ['window-two-01-north', { x: 295, y: 267 }], ['window-two-01-south', { x: 295, y: 338 }],
+    ['window-four-01-north-west', { x: 270, y: 407 }], ['window-four-01-north-east', { x: 362, y: 407 }],
+    ['window-four-01-south-west', { x: 270, y: 488 }], ['window-four-01-south-east', { x: 362, y: 488 }],
+    ['window-two-02-north', { x: 295, y: 567 }], ['window-two-02-south', { x: 295, y: 638 }],
+    ['community-left-340', { x: 485, y: 340 }], ['community-right-340', { x: 635, y: 340 }],
+    ['community-left-410', { x: 485, y: 410 }], ['community-right-410', { x: 635, y: 410 }],
+    ['community-left-480', { x: 485, y: 480 }], ['community-right-480', { x: 635, y: 480 }],
+    ['community-left-550', { x: 485, y: 550 }], ['community-right-550', { x: 635, y: 550 }],
+    ['fireplace-chair-01', { x: 872, y: 528 }], ['fireplace-chair-02', { x: 872, y: 668 }],
+    ['fireplace-beanbag-01', { x: 1047, y: 704 }],
   ]);
   private exitCoordinates = new Map<string, { x: number; y: number }>([
-    ['window-two-01', { x: 385, y: 310 }],
-    ['window-four-01', { x: 410, y: 460 }],
-    ['window-two-02', { x: 385, y: 610 }],
-    ['community-01', { x: 670, y: 450 }],
-    ['fireplace-chair-01', { x: 780, y: 528 }],
-    ['fireplace-chair-02', { x: 780, y: 668 }],
-    ['fireplace-beanbag-01', { x: 930, y: 705 }],
+    ['window-two-01-north', { x: 295, y: 245 }], ['window-two-01-south', { x: 295, y: 360 }],
+    ['window-four-01-north-west', { x: 250, y: 385 }], ['window-four-01-north-east', { x: 382, y: 385 }],
+    ['window-four-01-south-west', { x: 250, y: 510 }], ['window-four-01-south-east', { x: 382, y: 510 }],
+    ['window-two-02-north', { x: 295, y: 545 }], ['window-two-02-south', { x: 295, y: 660 }],
+    ['community-left-340', { x: 455, y: 340 }], ['community-right-340', { x: 665, y: 340 }],
+    ['community-left-410', { x: 455, y: 410 }], ['community-right-410', { x: 665, y: 410 }],
+    ['community-left-480', { x: 455, y: 480 }], ['community-right-480', { x: 665, y: 480 }],
+    ['community-left-550', { x: 455, y: 550 }], ['community-right-550', { x: 665, y: 550 }],
+    ['fireplace-chair-01', { x: 780, y: 528 }], ['fireplace-chair-02', { x: 780, y: 668 }],
+    ['fireplace-beanbag-01', { x: 950, y: 704 }],
   ]);
   private obstacles: Obstacle[] = [];
   private occupiedSeatId: string | null = null;
@@ -175,7 +189,7 @@ export class CafeScene extends Scene {
     this.addObstacle(1018, 490, 88, 130);
     this.addObstacle(820, 490, 105, 76);
     this.addObstacle(820, 630, 105, 76);
-    this.addObstacle(970, 650, 115, 78);
+    this.addObstacle(990, 665, 115, 78);
     this.addObstacle(1042, 318, 60, 126);
     this.addObstacle(250, 275, 90, 54);
     this.addObstacle(250, 415, 132, 64);
@@ -349,14 +363,11 @@ export class CafeScene extends Scene {
   private drawCommunityTable(graphics: Phaser.GameObjects.Graphics) {
     graphics.fillStyle(0x704940, 1);
     graphics.fillRoundedRect(500, 300, 120, 300, 8);
-    graphics.fillStyle(0xd19a68, 1);
-    graphics.fillRect(512, 314, 14, 272);
     for (let y = 340; y < 580; y += 70) {
       graphics.fillStyle(0x49333a, 1);
       graphics.fillCircle(485, y, 13);
       graphics.fillCircle(635, y, 13);
     }
-    this.add.text(560, 450, 'COMMUNITY TABLE', { color: '#ffe8c0', fontFamily: 'monospace', fontSize: '12px', letterSpacing: 1 }).setOrigin(0.5).setAngle(-90);
   }
 
   private drawWindowTables(graphics: Phaser.GameObjects.Graphics) {
@@ -368,8 +379,6 @@ export class CafeScene extends Scene {
   private drawTable(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, capacity: string) {
     graphics.fillStyle(0x71483f, 1);
     graphics.fillRoundedRect(x, y, width, height, 6);
-    graphics.fillStyle(0xe4b16f, 1);
-    graphics.fillRect(x + 8, y + 8, width - 16, 12);
     graphics.fillStyle(0x4a3339, 1);
     if (capacity === '2') {
       graphics.fillCircle(x + width / 2, y - 8, 12);
@@ -398,7 +407,7 @@ export class CafeScene extends Scene {
     }
     this.drawArmchair(graphics, 820, 490, 105, 76);
     this.drawArmchair(graphics, 820, 630, 105, 76);
-    this.drawBeanBag(graphics, 970, 650, 115, 78);
+    this.drawBeanBag(graphics, 990, 665, 115, 78);
     this.add.text(1018, 476, isNight ? '炉火正暖' : '壁炉', { color: '#633d3a', fontFamily: 'monospace', fontSize: '11px' });
   }
 
