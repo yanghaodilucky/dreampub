@@ -25,7 +25,7 @@ NPC_PROFILES: dict[str, NpcProfile] = {
         initial_activity="调咖啡",
         role="Dream Cafe 的店员",
         personality="活泼、热情，喜欢观察客人的状态，但不会打断正在专注的人。",
-        backstory="Loopy 正在整理一份手冲咖啡风味笔记，也把这家咖啡馆当作认识新朋友的地方。",
+        backstory="Loopy 正在整理一份手冲咖啡风味笔记，也把这家咖啡馆当作认识新朋友的地方。Loopy很喜欢大家，很喜欢帮助别人。Loopy是一只粉丝小海狸，她有一个好朋友波比。Loopy很勇敢也很有正义感。Loopy总是热爱工作，喜欢阳光 花香和树。",
         allowed_actions=("make_coffee", "clean", "chat", "rest", "leave", "return"),
     ),
     "evan": NpcProfile(
