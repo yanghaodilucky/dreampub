@@ -14,12 +14,15 @@ from app.agents.profiles import NPC_PROFILES, NpcProfile
 CAFE_LOCATION = "dream-cafe"
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 ANCHORS = {
-    "coffee_bar": (1450, 905), "cleaning": (1580, 1160), "reading": (895, 910),
-    "working": (1160, 1050), "rest": (1470, 1268), "exit": (740, 770),
+    "coffee_bar": (1450, 905), "cleaning": (1580, 1160), "rest": (1470, 1268), "exit": (740, 770),
+    "window_north": (895, 867), "window_south": (895, 938), "window_four_north": (870, 1007),
+    "window_four_south": (962, 1088), "window_lower": (895, 1167), "community_left": (1085, 1010),
+    "community_right": (1235, 1080),
 }
+WORK_SEAT_ANCHORS = ("window_north", "window_south", "window_four_north", "window_four_south", "window_lower", "community_left", "community_right")
 ACTIVITIES = {
     "make_coffee": ("coffee_bar", "调咖啡", "working"), "clean": ("cleaning", "打扫卫生", "working"),
-    "read": ("reading", "读报", "working"), "work": ("working", "办公", "working"),
+    "read": ("window_north", "读报", "working"), "work": ("community_right", "办公", "working"),
     "rest": ("rest", "休息", "break"), "chat": ("rest", "聊天", "break"),
     "leave": ("exit", "外出中", "offstage"), "return": ("coffee_bar", "回到咖啡馆", "moving"),
 }
@@ -128,6 +131,8 @@ class CafeWorld:
             self.apply_action(profile, "return", now)
             return True
         if profile.npc_id == "evan" and minutes >= 20 * 60:
+            if npc.activity == "办公":
+                return False
             return self.apply_action(profile, "work", now, until=now.replace(hour=21, minute=30, second=0, microsecond=0))
         if now < self.next_action_at[profile.npc_id]:
             return False
@@ -146,6 +151,8 @@ class CafeWorld:
 
     def apply_action(self, profile: NpcProfile, action: str, now: datetime, until: datetime | None = None) -> bool:
         anchor, activity, state = ACTIVITIES.get(action, ACTIVITIES["rest"])
+        if profile.npc_id == "evan" and action in {"read", "work"}:
+            anchor = random.choice(WORK_SEAT_ANCHORS)
         npc = self.states[profile.npc_id]
         previous = (npc.x, npc.y, npc.activity, npc.state, npc.visible)
         npc.x, npc.y = ANCHORS[anchor]

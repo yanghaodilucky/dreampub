@@ -81,6 +81,7 @@ export class CafeScene extends Scene {
   private unsubscribeStopped?: () => void;
   private npcSocket?: NpcSocket;
   private npcVisuals = new Map<string, NpcVisual>();
+  private npcOccupiedSeats = new Set<string>();
   private npcPositionReportAt = 0;
   private unsubscribeNpcSend?: () => void;
 
@@ -490,6 +491,7 @@ export class CafeScene extends Scene {
   }
 
   private applyNpcStates(states: NpcWorldState[]) {
+    this.npcOccupiedSeats.clear();
     states.forEach((state) => {
       const visual = this.npcVisuals.get(state.actor_id);
       if (!visual) return;
@@ -500,6 +502,13 @@ export class CafeScene extends Scene {
       visual.body.setVisible(visible);
       visual.name.setVisible(visible);
       visual.activity.setVisible(visible);
+      if (visible && state.state === 'working') {
+        const occupiedSpot = this.focusSpots.find((spot) => {
+          const point = this.focusCoordinates.get(spot.seatId)!;
+          return Math.hypot(point.x - state.x, point.y - state.y) < 26;
+        });
+        if (occupiedSpot) this.npcOccupiedSeats.add(occupiedSpot.seatId);
+      }
     });
   }
 
@@ -538,7 +547,7 @@ export class CafeScene extends Scene {
       const point = this.focusCoordinates.get(spot.seatId)!;
       const hotspot = this.add.circle(point.x, point.y, 46, 0xffffff, 0).setInteractive({ useHandCursor: true });
       hotspot.on('pointerup', () => {
-        if (!this.isFocusing && this.time.now - this.lastCameraDragAt > 80) this.useFocusSpot(spot);
+        if (!this.isFocusing && !this.npcOccupiedSeats.has(spot.seatId) && this.time.now - this.lastCameraDragAt > 80) this.useFocusSpot(spot);
       });
     }
     const board = this.add.rectangle(1076, 325, 100, 168, 0xffffff, 0).setInteractive({ useHandCursor: true });
@@ -584,6 +593,7 @@ export class CafeScene extends Scene {
 
   private closestFocusSpot() {
     return this.focusSpots.find((spot) => {
+      if (this.npcOccupiedSeats.has(spot.seatId)) return false;
       const point = this.focusCoordinates.get(spot.seatId)!;
       return Math.hypot(this.player.x - point.x, this.player.y - point.y) < 54;
     }) ?? null;

@@ -65,9 +65,11 @@ export function App() {
 }
 
 function NpcChat({ lines }: { lines: ChatLine[] }) {
+  const [collapsed, setCollapsed] = useState(false);
   const [content, setContent] = useState('');
   const send = (event: FormEvent) => { event.preventDefault(); if (!content.trim()) return; gameBridge.emit('npc.send', { content: content.trim() }); setContent(''); };
-  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-history">{lines.map((line) => <p key={line.id}><strong>{line.name}</strong>{line.content}</p>)}</div><form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
+  if (collapsed) return <button className="npc-chat-toggle" onClick={() => setCollapsed(false)}>💬 对话</button>;
+  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-heading"><span>附近的 NPC</span><button type="button" onClick={() => setCollapsed(true)}>收起</button></div><div className="npc-chat-history">{lines.map((line) => <p key={line.id}><strong>{line.name}</strong>{line.content}</p>)}</div><form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
 }
 
 function ProjectDesk({ projects, tasks, sessions, selectedProjectId, onAddProject, onAddTask, onDeleteProject, onDeleteSession, onDeleteTask, onSelectProject, onToggleTask, onUpdateProject, onUpdateTask }: { projects: Project[]; tasks: Task[]; sessions: FocusSession[]; selectedProjectId: string; onAddProject: (project: Omit<Project, 'id' | 'color'>) => void; onAddTask: (task: Omit<Task, 'id' | 'status'>) => void; onDeleteProject: (id: string) => void; onDeleteSession: (id: string) => void; onDeleteTask: (id: string) => void; onSelectProject: (id: string) => void; onToggleTask: (id: string) => void; onUpdateProject: (id: string, changes: Pick<Project, 'startDate' | 'endDate'>) => void; onUpdateTask: (id: string, changes: Pick<Task, 'startDate' | 'endDate'>) => void }) {
