@@ -46,6 +46,6 @@ async def world_socket(websocket: WebSocket, world_id: str) -> None:
     await world.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            await world.handle_client_message(await websocket.receive_text())
     except WebSocketDisconnect:
         world.disconnect(websocket)

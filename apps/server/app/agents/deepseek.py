@@ -60,3 +60,28 @@ class DeepSeekClient:
                 return None
 
         return await asyncio.to_thread(request_model)
+
+    async def reply(self, profile: NpcProfile, user_message: str, recent_memory: list[str]) -> str | None:
+        if not self.enabled:
+            return None
+        prompt = (
+            f"你是 Dream Cafe 的 {profile.name}，{profile.role}。{profile.personality} {profile.backstory} "
+            f"最近记忆：{' | '.join(recent_memory[-4:]) or '无'}。用户说：{user_message}。"
+            "请用中文自然回答，不超过两句话；不要假装知道用户没有告诉你的事实。"
+        )
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [{"role": "system", "content": "你是一个温和、真实的咖啡馆 NPC。"}, {"role": "user", "content": prompt}],
+            "temperature": 0.85,
+        }).encode()
+
+        def request_model() -> str | None:
+            request = Request("https://api.deepseek.com/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
+            try:
+                with urlopen(request, timeout=20) as response:
+                    body = json.loads(response.read().decode())
+                return str(body["choices"][0]["message"]["content"]).strip()[:500] or None
+            except (KeyError, TypeError, ValueError, URLError, TimeoutError):
+                return None
+
+        return await asyncio.to_thread(request_model)

@@ -9,13 +9,17 @@ export type NpcWorldState = {
 };
 
 type WorldMessage = { kind: 'snapshot' | 'state.delta'; entities: NpcWorldState[] };
+type NpcSpokeMessage = { kind: 'world.event'; event: { type: 'npc.spoke'; actor_id: string; payload: { content: string } } };
 
 export class NpcSocket {
   private socket?: WebSocket;
   private reconnectTimer?: number;
   private closed = false;
 
-  constructor(private readonly onStates: (states: NpcWorldState[]) => void) {}
+  constructor(
+    private readonly onStates: (states: NpcWorldState[]) => void,
+    private readonly onSpoke: (npcId: string, content: string) => void,
+  ) {}
 
   connect() {
     const configuredUrl = import.meta.env.VITE_NPC_SERVER_URL;
@@ -23,10 +27,11 @@ export class NpcSocket {
     this.socket = new WebSocket(socketUrl);
     this.socket.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data) as WorldMessage;
+        const message = JSON.parse(event.data) as WorldMessage | NpcSpokeMessage;
         if (message.kind === 'snapshot' || message.kind === 'state.delta') {
           this.onStates(message.entities.filter((entity) => entity.actor_kind === 'npc'));
         }
+        if (message.kind === 'world.event' && message.event.type === 'npc.spoke') this.onSpoke(message.event.actor_id, message.event.payload.content);
       } catch {
         // Invalid wire data is ignored; the local NPC fallback remains visible.
       }
@@ -40,5 +45,17 @@ export class NpcSocket {
     this.closed = true;
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.socket?.close();
+  }
+
+  sendPlayerPosition(x: number, y: number) {
+    this.send({ kind: 'player.position', x, y });
+  }
+
+  sendChat(content: string) {
+    this.send({ kind: 'npc.message', content });
+  }
+
+  private send(message: object) {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
 }

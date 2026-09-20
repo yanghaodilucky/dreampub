@@ -81,6 +81,8 @@ export class CafeScene extends Scene {
   private unsubscribeStopped?: () => void;
   private npcSocket?: NpcSocket;
   private npcVisuals = new Map<string, NpcVisual>();
+  private npcPositionReportAt = 0;
+  private unsubscribeNpcSend?: () => void;
 
   constructor() {
     super('CafeScene');
@@ -118,6 +120,10 @@ export class CafeScene extends Scene {
 
   update(_: number, delta: number) {
     this.updateNpcVisuals(delta);
+    if (this.time.now - this.npcPositionReportAt > 2000) {
+      this.npcSocket?.sendPlayerPosition(this.player.x, this.player.y);
+      this.npcPositionReportAt = this.time.now;
+    }
     if (this.isFocusing) return;
 
     const speed = 0.16 * delta;
@@ -475,8 +481,12 @@ export class CafeScene extends Scene {
   }
 
   private connectNpcs() {
-    this.npcSocket = new NpcSocket((states) => this.applyNpcStates(states));
+    this.npcSocket = new NpcSocket(
+      (states) => this.applyNpcStates(states),
+      (npcId, content) => this.showNpcSpeech(npcId, content),
+    );
     this.npcSocket.connect();
+    this.unsubscribeNpcSend = gameBridge.on('npc.send', ({ content }) => this.npcSocket?.sendChat(content));
   }
 
   private applyNpcStates(states: NpcWorldState[]) {
@@ -502,6 +512,17 @@ export class CafeScene extends Scene {
       visual.name.setPosition(x, y + 18);
       visual.activity.setPosition(x, y + 34);
     });
+  }
+
+  private showNpcSpeech(npcId: string, content: string) {
+    const visual = this.npcVisuals.get(npcId);
+    if (!visual) return;
+    const bubble = this.add.text(visual.body.x, visual.body.y - 16, content, {
+      color: '#3f3040', backgroundColor: '#fff1d0', fontFamily: 'sans-serif', fontSize: '12px',
+      padding: { x: 7, y: 5 }, wordWrap: { width: 210 }, align: 'center',
+    }).setOrigin(0.5, 1).setDepth(5);
+    this.tweens.add({ targets: bubble, alpha: 0, delay: 7500, duration: 900, onComplete: () => bubble.destroy() });
+    gameBridge.emit('npc.message', { npcId, content });
   }
 
   private createInput() {
@@ -612,6 +633,7 @@ export class CafeScene extends Scene {
 
   private cleanUp() {
     this.npcSocket?.close();
+    this.unsubscribeNpcSend?.();
     this.unsubscribeFocus?.();
     this.unsubscribeLeave?.();
     this.unsubscribeStopped?.();

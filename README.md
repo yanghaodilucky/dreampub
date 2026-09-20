@@ -30,7 +30,7 @@ uv run uvicorn app.main:app --reload --port 8000
 
 再在另一个终端启动 `apps/web` 的 Vite 服务。网页会自动连接 `ws://127.0.0.1:8000/ws/world/dream-cafe`；后端没有运行时，网页仍展示静态 NPC。
 
-在 `apps/server/.env` 中填写 `DEEPSEEK_API_KEY=你的密钥` 即可启用 DeepSeek 决策。密钥不会进入浏览器或 Git；未配置时两名 NPC 使用确定性作息。可修改 `NPC_TICK_SECONDS` 控制每次高层活动决策的间隔。
+在 `apps/server/.env` 中填写 `DEEPSEEK_API_KEY=你的密钥` 即可启用 DeepSeek 决策。密钥不会进入浏览器或 Git；未配置时两名 NPC 使用确定性作息。`NPC_TICK_SECONDS` 是服务检查时间与玩家距离的间隔；NPC 的日常活动会持续约 12–90 分钟，不会因检查而频繁换状态。
 
 可手动编辑的角色设定在 [NPC_PROFILES](apps/server/app/agents/profiles.py)：包括姓名、颜色、初始位置、身份、性格、背景和允许活动。前端只负责显示和移动 NPC。
 

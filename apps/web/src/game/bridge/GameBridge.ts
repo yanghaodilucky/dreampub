@@ -1,5 +1,6 @@
 export type FocusSpot = { seatId: string; label: string };
 export type FocusStarted = { taskId: string; taskTitle: string; seatId: string };
+export type NpcMessage = { npcId: string; content: string };
 
 type BridgeEvents = {
   'focus.open': FocusSpot | null;
@@ -8,6 +9,8 @@ type BridgeEvents = {
   'tasks.open': undefined;
   'focus.started': FocusStarted;
   'focus.stopped': undefined;
+  'npc.message': NpcMessage;
+  'npc.send': { content: string };
   'game.error': { message: string };
 };
 

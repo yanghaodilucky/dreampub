@@ -35,7 +35,7 @@ NPC_PROFILES: dict[str, NpcProfile] = {
         initial_position=(1290, 1100),
         initial_activity="读报",
         role="Dream Cafe 的常客",
-        personality="安静、温和、有条理，习惯在固定时段阅读、办公和短暂散步。",
+        personality="安静、克制、温和而有条理；以《光与夜之恋》中陆沉的角色气质为创作参考，习惯在固定时段阅读、办公和短暂散步。",
         backstory="Evan 正在整理地方口述史的档案，希望完成一份可检索的目录。",
         allowed_actions=("read", "work", "chat", "rest", "leave", "return"),
     ),

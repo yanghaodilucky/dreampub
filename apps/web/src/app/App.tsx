@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { PhaserGame } from '../game/PhaserGame';
-import { gameBridge, type FocusSpot } from '../game/bridge/GameBridge';
+import { gameBridge, type FocusSpot, type NpcMessage } from '../game/bridge/GameBridge';
 
 type Drawer = 'tasks' | 'focus' | null;
 type Project = { id: string; name: string; color: string; startDate: string; endDate: string };
 type Task = { id: string; projectId: string; title: string; status: 'next' | 'done'; startDate: string; endDate: string };
 type FocusSession = { id: string; taskId: string; projectId: string; startedAt: string; durationSeconds: number };
+type ChatLine = NpcMessage & { id: string; name: string };
 
 const COLORS = ['#f39a6b', '#8ac6a8', '#80b9dc', '#b89bd9', '#e8c26e', '#df8eb0'];
 const STORE = { projects: 'dreampub.projects', tasks: 'dreampub.tasks', sessions: 'dreampub.focus-sessions' };
@@ -29,6 +30,7 @@ export function App() {
   const [focusStartedAt, setFocusStartedAt] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gameError, setGameError] = useState<string | null>(null);
+  const [chatLines, setChatLines] = useState<ChatLine[]>([]);
   const activeTask = useMemo(() => tasks.find((task) => task.id === activeTaskId) ?? null, [activeTaskId, tasks]);
   const remainingTasks = tasks.filter((task) => task.status === 'next');
   useEffect(() => { window.localStorage.setItem(STORE.projects, JSON.stringify(projects)); }, [projects]);
@@ -38,6 +40,7 @@ export function App() {
   useEffect(() => gameBridge.on('focus.closed', () => { setFocusSpot(null); setDrawer(null); }), []);
   useEffect(() => gameBridge.on('tasks.open', () => setDrawer('tasks')), []);
   useEffect(() => gameBridge.on('game.error', ({ message }) => setGameError(message)), []);
+  useEffect(() => gameBridge.on('npc.message', ({ npcId, content }) => setChatLines((current) => [...current, { id: crypto.randomUUID(), npcId, content, name: npcId === 'evan' ? 'Evan' : 'Loopy' }].slice(-3))), []);
   useEffect(() => { if (!focusStartedAt) return; const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - focusStartedAt.getTime()) / 1000)), 1000); return () => window.clearInterval(interval); }, [focusStartedAt]);
   const startFocus = (task: Task) => { if (!focusSpot) return; setActiveTaskId(task.id); setFocusStartedAt(new Date()); setElapsedSeconds(0); gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId }); };
   const stopFocus = () => { if (activeTask && focusStartedAt) setSessions((current) => [...current, { id: crypto.randomUUID(), taskId: activeTask.id, projectId: activeTask.projectId, startedAt: focusStartedAt.toISOString(), durationSeconds: Math.max(1, elapsedSeconds) }]); gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
@@ -58,7 +61,13 @@ export function App() {
     setTasks((current) => current.filter((task) => task.id !== taskId)); setSessions((current) => current.filter((session) => session.taskId !== taskId));
   };
   const deleteSession = (sessionId: string) => { if (window.confirm('删除这段专注记录吗？')) setSessions((current) => current.filter((session) => session.id !== sessionId)); };
-  return <main className="cafe-shell"><section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界"><PhaserGame /><header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button></div></header><div className="world-caption"><span>● Loopy 在吧台调咖啡</span><span>● Evan 在中央长桌读报</span></div>{gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}</section>{drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}<aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside></main>;
+  return <main className="cafe-shell"><section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界"><PhaserGame /><header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button></div></header><div className="world-caption"><span>● Loopy 在吧台调咖啡</span><span>● Evan 在中央长桌读报</span></div><NpcChat lines={chatLines} />{gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}</section>{drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}<aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside></main>;
+}
+
+function NpcChat({ lines }: { lines: ChatLine[] }) {
+  const [content, setContent] = useState('');
+  const send = (event: FormEvent) => { event.preventDefault(); if (!content.trim()) return; gameBridge.emit('npc.send', { content: content.trim() }); setContent(''); };
+  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-history">{lines.map((line) => <p key={line.id}><strong>{line.name}</strong>{line.content}</p>)}</div><form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
 }
 
 function ProjectDesk({ projects, tasks, sessions, selectedProjectId, onAddProject, onAddTask, onDeleteProject, onDeleteSession, onDeleteTask, onSelectProject, onToggleTask, onUpdateProject, onUpdateTask }: { projects: Project[]; tasks: Task[]; sessions: FocusSession[]; selectedProjectId: string; onAddProject: (project: Omit<Project, 'id' | 'color'>) => void; onAddTask: (task: Omit<Task, 'id' | 'status'>) => void; onDeleteProject: (id: string) => void; onDeleteSession: (id: string) => void; onDeleteTask: (id: string) => void; onSelectProject: (id: string) => void; onToggleTask: (id: string) => void; onUpdateProject: (id: string, changes: Pick<Project, 'startDate' | 'endDate'>) => void; onUpdateTask: (id: string, changes: Pick<Task, 'startDate' | 'endDate'>) => void }) {
