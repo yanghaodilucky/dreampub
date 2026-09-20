@@ -124,6 +124,14 @@
                     "type": "null"
                   }
                 ]
+              },
+              "activity": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "visible": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -374,6 +382,14 @@
                     "type": "null"
                   }
                 ]
+              },
+              "activity": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "visible": {
+                "type": "boolean"
               }
             },
             "required": [

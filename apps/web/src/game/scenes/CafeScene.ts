@@ -1,7 +1,15 @@
 import { Input, Math as PhaserMath, Scene, Scenes } from 'phaser';
 import { gameBridge, type FocusStarted, type FocusSpot } from '../bridge/GameBridge';
+import { NpcSocket, type NpcWorldState } from '../realtime/npcSocket';
 
 type Obstacle = { x: number; y: number; width: number; height: number };
+type NpcVisual = {
+  body: Phaser.GameObjects.Rectangle;
+  name: Phaser.GameObjects.Text;
+  activity: Phaser.GameObjects.Text;
+  targetX: number;
+  targetY: number;
+};
 
 const WORLD_WIDTH = 2400;
 const WORLD_HEIGHT = 1800;
@@ -71,6 +79,8 @@ export class CafeScene extends Scene {
   private unsubscribeFocus?: () => void;
   private unsubscribeLeave?: () => void;
   private unsubscribeStopped?: () => void;
+  private npcSocket?: NpcSocket;
+  private npcVisuals = new Map<string, NpcVisual>();
 
   constructor() {
     super('CafeScene');
@@ -87,6 +97,7 @@ export class CafeScene extends Scene {
       this.createHotspots();
       this.placeCafeInWorld(cafeChildStart);
       this.setupCamera();
+      this.connectNpcs();
       this.unsubscribeFocus = gameBridge.on('focus.started', (focus) => this.startFocus(focus));
       this.unsubscribeLeave = gameBridge.on('focus.leave', () => this.leaveSeat());
       this.unsubscribeStopped = gameBridge.on('focus.stopped', () => this.stopFocus());
@@ -106,6 +117,7 @@ export class CafeScene extends Scene {
   }
 
   update(_: number, delta: number) {
+    this.updateNpcVisuals(delta);
     if (this.isFocusing) return;
 
     const speed = 0.16 * delta;
@@ -242,6 +254,10 @@ export class CafeScene extends Scene {
     this.offsetCoordinates(this.focusCoordinates);
     this.offsetCoordinates(this.exitCoordinates);
     this.obstacles = this.obstacles.map((obstacle) => ({ ...obstacle, x: obstacle.x + CAFE_X, y: obstacle.y + CAFE_Y }));
+    this.npcVisuals.forEach((visual) => {
+      visual.targetX += CAFE_X;
+      visual.targetY += CAFE_Y;
+    });
   }
 
   private offsetCoordinates(coordinates: Map<string, { x: number; y: number }>) {
@@ -447,14 +463,45 @@ export class CafeScene extends Scene {
   private createPeople() {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    this.createPerson(850, 205, 0xd18ba5, 'Loopy', '调咖啡');
-    this.createPerson(690, 500, 0x9ecc8b, 'Evan', '读报');
+    this.createPerson('loopy', 850, 205, 0xd18ba5, 'Loopy', '调咖啡');
+    this.createPerson('evan', 690, 500, 0x9ecc8b, 'Evan', '读报');
   }
 
-  private createPerson(x: number, y: number, color: number, name: string, activity: string) {
-    this.add.rectangle(x, y, PLAYER_SIZE, PLAYER_SIZE, color).setStrokeStyle(2, 0xfff5dc);
-    this.add.text(x, y + 18, name, { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    this.add.text(x, y + 34, activity, { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
+  private createPerson(npcId: string, x: number, y: number, color: number, name: string, activity: string) {
+    const body = this.add.rectangle(x, y, PLAYER_SIZE, PLAYER_SIZE, color).setStrokeStyle(2, 0xfff5dc);
+    const nameText = this.add.text(x, y + 18, name, { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
+    const activityText = this.add.text(x, y + 34, activity, { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
+    this.npcVisuals.set(npcId, { body, name: nameText, activity: activityText, targetX: x, targetY: y });
+  }
+
+  private connectNpcs() {
+    this.npcSocket = new NpcSocket((states) => this.applyNpcStates(states));
+    this.npcSocket.connect();
+  }
+
+  private applyNpcStates(states: NpcWorldState[]) {
+    states.forEach((state) => {
+      const visual = this.npcVisuals.get(state.actor_id);
+      if (!visual) return;
+      visual.targetX = state.x;
+      visual.targetY = state.y;
+      visual.activity.setText(state.activity ?? (state.state === 'offstage' ? '外出中' : '休息'));
+      const visible = state.visible ?? state.state !== 'offstage';
+      visual.body.setVisible(visible);
+      visual.name.setVisible(visible);
+      visual.activity.setVisible(visible);
+    });
+  }
+
+  private updateNpcVisuals(delta: number) {
+    const progress = Math.min(1, delta / 520);
+    this.npcVisuals.forEach((visual) => {
+      const x = PhaserMath.Linear(visual.body.x, visual.targetX, progress);
+      const y = PhaserMath.Linear(visual.body.y, visual.targetY, progress);
+      visual.body.setPosition(x, y);
+      visual.name.setPosition(x, y + 18);
+      visual.activity.setPosition(x, y + 34);
+    });
   }
 
   private createInput() {
@@ -564,6 +611,7 @@ export class CafeScene extends Scene {
   }
 
   private cleanUp() {
+    this.npcSocket?.close();
     this.unsubscribeFocus?.();
     this.unsubscribeLeave?.();
     this.unsubscribeStopped?.();

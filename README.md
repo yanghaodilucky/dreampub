@@ -18,6 +18,22 @@ pnpm dev
 
 在浏览器打开命令显示的本地地址。使用方向键或 WASD 移动，靠近书桌按 E，或点击座位；选择任务后可查看临时计时。原型任务与计时刷新后会清空。
 
+## NPC 服务与 DeepSeek
+
+先在一个终端启动后端：
+
+```sh
+cd apps/server
+cp .env.example .env
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+再在另一个终端启动 `apps/web` 的 Vite 服务。网页会自动连接 `ws://127.0.0.1:8000/ws/world/dream-cafe`；后端没有运行时，网页仍展示静态 NPC。
+
+在 `apps/server/.env` 中填写 `DEEPSEEK_API_KEY=你的密钥` 即可启用 DeepSeek 决策。密钥不会进入浏览器或 Git；未配置时两名 NPC 使用确定性作息。可修改 `NPC_TICK_SECONDS` 控制每次高层活动决策的间隔。
+
+可手动编辑的角色设定在 [NPC_PROFILES](apps/server/app/agents/profiles.py)：包括姓名、颜色、初始位置、身份、性格、背景和允许活动。前端只负责显示和移动 NPC。
+
 ## 首版
 
 - 网页端，一个像素咖啡馆、一个玩家、两个 NPC（Loopy 和 Evan；第三个待核心闭环验证后加入）。
