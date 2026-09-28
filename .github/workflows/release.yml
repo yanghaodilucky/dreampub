@@ -1,0 +1,33 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Verify and publish release notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v24
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+      - name: Verify release candidate
+        run: |
+          cd apps/web && pnpm install --frozen-lockfile && pnpm build
+          cd ../server && uv run python -m unittest discover -s tests -v
+          cd ../.. && uv run --with jsonschema==4.25.1 python scripts/validate_contracts.py
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "DreamPub $GITHUB_REF_NAME" --generate-notes

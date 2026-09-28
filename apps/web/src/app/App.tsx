@@ -1,15 +1,33 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { PhaserGame } from '../game/PhaserGame';
-import { gameBridge, type FocusSpot, type NpcMessage } from '../game/bridge/GameBridge';
+import { gameBridge, type FocusSpot, type NpcMessage, type NpcStatus } from '../game/bridge/GameBridge';
+import { compileCharacter, getCharacterVersions, pauseWorld, resumeWorld, saveCharacterPreview, type CharacterId, type CharacterTemplate, type CharacterVersion } from '../api/characterApi';
 
 type Drawer = 'tasks' | 'focus' | null;
 type Project = { id: string; name: string; color: string; startDate: string; endDate: string };
 type Task = { id: string; projectId: string; title: string; status: 'next' | 'done'; startDate: string; endDate: string };
 type FocusSession = { id: string; taskId: string; projectId: string; startedAt: string; durationSeconds: number };
-type ChatLine = NpcMessage & { id: string; name: string };
+type ChatLine = NpcMessage & { id: string; name: string; receivedAt: number; speaker: 'npc' | 'player' };
 
 const COLORS = ['#f39a6b', '#8ac6a8', '#80b9dc', '#b89bd9', '#e8c26e', '#df8eb0'];
 const STORE = { projects: 'dreampub.projects', tasks: 'dreampub.tasks', sessions: 'dreampub.focus-sessions' };
+const CHARACTER_QUESTIONS = [
+  { id: 'first_meeting', part: 'Part I · TA 是谁？', question: '你第一次遇见 TA，是在哪里？那一天发生了什么？' },
+  { id: 'perfect_day', part: 'Part I · TA 是谁？', question: '如果 TA 可以完全按照自己的心意度过一天，那会是什么样的一天？' },
+  { id: 'absorbing_activities', part: 'Part I · TA 是谁？', question: 'TA 最喜欢做什么？有什么事情会让 TA 一做起来就忘记时间？' },
+  { id: 'what_matters', part: 'Part II · TA 怎样看待世界？', question: 'TA 最珍惜什么？可以是一件东西、一段关系、一种感觉，或者一种生活方式。' },
+  { id: 'precious_memory', part: 'Part II · TA 怎样看待世界？', question: 'TA 有没有一段非常珍贵的回忆？如果有，那是什么？' },
+  { id: 'unfinished_dream', part: 'Part II · TA 怎样看待世界？', question: 'TA 有没有一件一直想做、但还没有做到的事情？为什么还没有去做？' },
+  { id: 'meaning_of_love', part: 'Part III · TA 怎样爱别人？', question: '对 TA 来说，爱一个人意味着什么？' },
+  { id: 'showing_care', part: 'Part III · TA 怎样爱别人？', question: 'TA 通常怎样表达关心？' },
+  { id: 'relationship_with_player', part: 'Part III · TA 怎样爱别人？', question: 'TA 和你是什么关系？这段关系最核心的感觉是什么？' },
+  { id: 'stress_response', part: 'Part IV · TA 怎样面对自己？', question: 'TA 累了、难过了，或者想一个人待一会儿时，通常会怎样？' },
+  { id: 'desired_ability', part: 'Part IV · TA 怎样面对自己？', question: '如果 TA 明天醒来，可以获得一种能力，TA 最希望得到什么能力？为什么？' },
+  { id: 'small_wish', part: 'Part IV · TA 怎样面对自己？', question: 'TA 最近有没有一个很小、但真的很想完成的愿望？' },
+] as const;
+type CharacterQuestionId = typeof CHARACTER_QUESTIONS[number]['id'];
+type CharacterAnswers = Record<CharacterQuestionId, string>;
+const blankCharacterAnswers = (): CharacterAnswers => Object.fromEntries(CHARACTER_QUESTIONS.map(({ id }) => [id, ''])) as CharacterAnswers;
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const addDays = (date: Date, days: number) => { const result = new Date(date); result.setDate(result.getDate() + days); return dateKey(result); };
 const dateValue = (value: string) => new Date(`${value}T00:00:00`).getTime();
@@ -31,6 +49,17 @@ export function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gameError, setGameError] = useState<string | null>(null);
   const [chatLines, setChatLines] = useState<ChatLine[]>([]);
+  const [npcStatuses, setNpcStatuses] = useState<NpcStatus[]>([]);
+  const [characterStudioOpen, setCharacterStudioOpen] = useState(false);
+  const [worldPaused, setWorldPaused] = useState(false);
+  const [characterId, setCharacterId] = useState<CharacterId>('evan');
+  const [characterAnswers, setCharacterAnswers] = useState<CharacterAnswers>(blankCharacterAnswers);
+  const [characterStep, setCharacterStep] = useState(0);
+  const [characterPreview, setCharacterPreview] = useState<CharacterTemplate | null>(null);
+  const [characterSaved, setCharacterSaved] = useState(false);
+  const [characterVersions, setCharacterVersions] = useState<CharacterVersion[]>([]);
+  const [characterBusy, setCharacterBusy] = useState(false);
+  const [characterError, setCharacterError] = useState<string | null>(null);
   const activeTask = useMemo(() => tasks.find((task) => task.id === activeTaskId) ?? null, [activeTaskId, tasks]);
   const remainingTasks = tasks.filter((task) => task.status === 'next');
   useEffect(() => { window.localStorage.setItem(STORE.projects, JSON.stringify(projects)); }, [projects]);
@@ -40,7 +69,21 @@ export function App() {
   useEffect(() => gameBridge.on('focus.closed', () => { setFocusSpot(null); setDrawer(null); }), []);
   useEffect(() => gameBridge.on('tasks.open', () => setDrawer('tasks')), []);
   useEffect(() => gameBridge.on('game.error', ({ message }) => setGameError(message)), []);
-  useEffect(() => gameBridge.on('npc.message', ({ npcId, content }) => setChatLines((current) => [...current, { id: crypto.randomUUID(), npcId, content, name: npcId === 'evan' ? 'Evan' : 'Loopy' }].slice(-3))), []);
+  useEffect(() => gameBridge.on('npc.message', ({ npcId, content, eventId }) => setChatLines((current) => {
+    const now = Date.now();
+    // The UI is the final boundary: even if a development reload leaves two
+    // scene connections alive momentarily, one NPC utterance is rendered once.
+    const duplicate = current.some((line) =>
+      (eventId && line.eventId === eventId)
+      || (line.npcId === npcId && line.content === content && now - line.receivedAt < 10_000),
+    );
+    if (duplicate) return current;
+    return [...current, { id: crypto.randomUUID(), npcId, content, eventId, name: npcId === 'evan' ? 'Evan' : 'Loopy', receivedAt: now, speaker: 'npc' as const }].slice(-100);
+  })), []);
+  useEffect(() => gameBridge.on('npc.send', ({ content }) => setChatLines((current) => [...current, {
+    id: crypto.randomUUID(), npcId: 'user', content, name: '你', receivedAt: Date.now(), speaker: 'player' as const,
+  }].slice(-100))), []);
+  useEffect(() => gameBridge.on('npc.states', setNpcStatuses), []);
   useEffect(() => { if (!focusStartedAt) return; const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - focusStartedAt.getTime()) / 1000)), 1000); return () => window.clearInterval(interval); }, [focusStartedAt]);
   const startFocus = (task: Task) => { if (!focusSpot) return; setActiveTaskId(task.id); setFocusStartedAt(new Date()); setElapsedSeconds(0); gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId }); };
   const stopFocus = () => { if (activeTask && focusStartedAt) setSessions((current) => [...current, { id: crypto.randomUUID(), taskId: activeTask.id, projectId: activeTask.projectId, startedAt: focusStartedAt.toISOString(), durationSeconds: Math.max(1, elapsedSeconds) }]); gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
@@ -61,15 +104,64 @@ export function App() {
     setTasks((current) => current.filter((task) => task.id !== taskId)); setSessions((current) => current.filter((session) => session.taskId !== taskId));
   };
   const deleteSession = (sessionId: string) => { if (window.confirm('删除这段专注记录吗？')) setSessions((current) => current.filter((session) => session.id !== sessionId)); };
-  return <main className="cafe-shell"><section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界"><PhaserGame /><header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button></div></header><div className="world-caption"><span>● Loopy 在吧台调咖啡</span><span>● Evan 在中央长桌读报</span></div><NpcChat lines={chatLines} />{gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}</section>{drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}<aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside></main>;
+  const loadCharacterVersions = async (id: CharacterId) => { const result = await getCharacterVersions(id); setCharacterVersions(result.versions); };
+  const openCharacterStudio = async () => {
+    setCharacterStudioOpen(true); setCharacterBusy(true); setCharacterError(null); setCharacterPreview(null); setCharacterSaved(false); setCharacterStep(0);
+    try { await pauseWorld(); setWorldPaused(true); await loadCharacterVersions(characterId); } catch (error) { setCharacterError(error instanceof Error ? error.message : '无法暂停世界或读取角色。'); } finally { setCharacterBusy(false); }
+  };
+  const closeCharacterStudio = async () => {
+    setCharacterBusy(true); setCharacterError(null);
+    try { await resumeWorld(); setWorldPaused(false); setCharacterStudioOpen(false); } catch (error) { setCharacterError(error instanceof Error ? error.message : '世界仍处于暂停状态，请重试继续。'); } finally { setCharacterBusy(false); }
+  };
+  const selectCharacter = async (id: CharacterId) => {
+    setCharacterId(id); setCharacterAnswers(blankCharacterAnswers()); setCharacterStep(0); setCharacterPreview(null); setCharacterSaved(false); setCharacterError(null); setCharacterBusy(true);
+    try { await loadCharacterVersions(id); } catch (error) { setCharacterError(error instanceof Error ? error.message : '无法读取角色版本。'); } finally { setCharacterBusy(false); }
+  };
+  const generateCharacterPreview = async () => {
+    if (Object.values(characterAnswers).some((answer) => !answer.trim())) return;
+    setCharacterBusy(true); setCharacterError(null);
+    try { const result = await compileCharacter(characterId, characterAnswers); setCharacterPreview(result.template_preview); setCharacterSaved(false); } catch (error) { setCharacterError(error instanceof Error ? error.message : '角色生成失败。'); } finally { setCharacterBusy(false); }
+  };
+  const saveCharacter = async () => {
+    if (!characterPreview) return;
+    setCharacterBusy(true); setCharacterError(null);
+    try { await saveCharacterPreview(characterId, characterPreview); await loadCharacterVersions(characterId); setCharacterSaved(true); } catch (error) { setCharacterError(error instanceof Error ? error.message : '角色保存失败。'); } finally { setCharacterBusy(false); }
+  };
+  const npcStatus = (npcId: string, name: string) => { const state = npcStatuses.find((item) => item.npcId === npcId); return state ? `● ${name} ${state.visible ? state.activity : '外出中'}` : `● ${name} 状态同步中`; };
+  return <main className="cafe-shell">
+    <section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界">
+      <PhaserGame />
+      <header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button><button className={characterStudioOpen ? 'toolbar-button active' : 'toolbar-button'} onClick={openCharacterStudio}>✦ 人物</button></div></header>
+      <div className="world-caption"><span>{npcStatus('loopy', 'Loopy')}</span><span>{npcStatus('evan', 'Evan')}</span>{worldPaused && <span className="paused-caption">Ⅱ 世界暂停中</span>}</div>
+      <NpcChat lines={chatLines} />
+      {gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}
+    </section>
+    {drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}
+    <aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside>
+    {characterStudioOpen && <CharacterStudio characterId={characterId} answers={characterAnswers} step={characterStep} preview={characterPreview} saved={characterSaved} versions={characterVersions} busy={characterBusy} error={characterError} onSelectCharacter={selectCharacter} onAnswer={(id, value) => setCharacterAnswers((current) => ({ ...current, [id]: value }))} onStep={setCharacterStep} onPreview={generateCharacterPreview} onEdit={() => { setCharacterPreview(null); setCharacterSaved(false); setCharacterStep(CHARACTER_QUESTIONS.length - 1); }} onSave={saveCharacter} onResume={closeCharacterStudio} />}
+  </main>;
 }
 
 function NpcChat({ lines }: { lines: ChatLine[] }) {
   const [collapsed, setCollapsed] = useState(false);
   const [content, setContent] = useState('');
   const send = (event: FormEvent) => { event.preventDefault(); if (!content.trim()) return; gameBridge.emit('npc.send', { content: content.trim() }); setContent(''); };
-  if (collapsed) return <button className="npc-chat-toggle" onClick={() => setCollapsed(false)}>💬 对话</button>;
-  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-heading"><span>附近的 NPC</span><button type="button" onClick={() => setCollapsed(true)}>收起</button></div><div className="npc-chat-history">{lines.map((line) => <p key={line.id}><strong>{line.name}</strong>{line.content}</p>)}</div><form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
+  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-heading"><span>{collapsed ? '对话记录已收起' : '附近的 NPC'}</span><button type="button" onClick={() => setCollapsed((current) => !current)}>{collapsed ? '展开记录' : '收起'}</button></div>{!collapsed && <div className="npc-chat-history">{lines.map((line) => <p key={line.id} className={line.speaker === 'player' ? 'player-message' : undefined}>{line.speaker === 'player' ? <>{line.content}<strong>{line.name}</strong></> : <><strong>{line.name}</strong>{line.content}</>}</p>)}</div>}<form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
+}
+
+function CharacterStudio({ characterId, answers, step, preview, saved, versions, busy, error, onSelectCharacter, onAnswer, onStep, onPreview, onEdit, onSave, onResume }: { characterId: CharacterId; answers: CharacterAnswers; step: number; preview: CharacterTemplate | null; saved: boolean; versions: CharacterVersion[]; busy: boolean; error: string | null; onSelectCharacter: (id: CharacterId) => void; onAnswer: (id: CharacterQuestionId, value: string) => void; onStep: (step: number) => void; onPreview: () => void; onEdit: () => void; onSave: () => void; onResume: () => void }) {
+  const item = CHARACTER_QUESTIONS[step];
+  const complete = Object.values(answers).every((answer) => answer.trim());
+  const active = versions.find((version) => version.is_active);
+  return <div className="character-studio-backdrop" role="dialog" aria-modal="true" aria-label="角色塑造问卷">
+    <section className="character-studio">
+      <header><div><p className="eyebrow">WORLD PAUSED · CHARACTER QUESTIONNAIRE V2</p><h1>在这里，慢慢认识 TA。</h1><p>世界已经暂停。你的答案只定义角色最初的样子，不会决定 TA 以后每一次行动。</p></div><button className="close-button" disabled={busy} onClick={onResume} aria-label="继续世界">×</button></header>
+      <div className="character-picker"><button className={characterId === 'evan' ? 'active' : ''} disabled={busy} onClick={() => onSelectCharacter('evan')}>Evan</button><button className={characterId === 'loopy' ? 'active' : ''} disabled={busy} onClick={() => onSelectCharacter('loopy')}>Loopy</button><span>当前版本 {active ? `v${active.version}` : '读取中'}</span></div>
+      {!preview ? <div className="question-flow"><div className="question-progress"><span>{item.part}</span><strong>{step + 1} / {CHARACTER_QUESTIONS.length}</strong></div><h2>{item.question}</h2><textarea value={answers[item.id]} disabled={busy} onChange={(event) => onAnswer(item.id, event.target.value)} placeholder="用你自己的话回答，不需要写得像设定集。" maxLength={1500} autoFocus />{error && <p className="character-error">{error}</p>}<footer><button className="secondary-button" disabled={busy || step === 0} onClick={() => onStep(step - 1)}>上一步</button>{step < CHARACTER_QUESTIONS.length - 1 ? <button className="primary-button" disabled={busy || !answers[item.id].trim()} onClick={() => onStep(step + 1)}>下一题</button> : <button className="primary-button" disabled={busy || !complete} onClick={onPreview}>{busy ? '正在生成…' : '生成角色与醒来第一句话'}</button>}</footer></div> : <div className="character-preview"><p className="eyebrow">AWAKENING</p><blockquote>“{preview.awakening.first_message}”</blockquote><small>{preview.awakening.used_fallback ? '由离线回退生成' : `由 ${preview.awakening.generator} 生成`}</small><section><h2>{preview.display_name} 的初始轮廓</h2><p>{preview.core_identity.summary}</p><h3>珍惜的事</h3><ul>{preview.core_identity.values.map((value) => <li key={value}>{value}</li>)}</ul><h3>与你的已知开始</h3><p>{preview.player_relationship.known_history}</p></section>{saved && <p className="character-saved">已保存为当前版本。你可以继续 Dream Cafe。</p>}{error && <p className="character-error">{error}</p>}<footer><button className="secondary-button" disabled={busy || saved} onClick={onEdit}>返回修改</button><button className="primary-button" disabled={busy || saved} onClick={onSave}>{saved ? '已保存' : busy ? '正在保存…' : '确认保存为新版本'}</button></footer></div>}
+      <div className="character-history"><strong>版本历史</strong>{versions.map((version) => <span key={version.version} className={version.is_active ? 'active' : ''}>v{version.version}{version.is_active ? ' · 当前' : ''}</span>)}</div>
+      <button className="resume-world" disabled={busy} onClick={onResume}>继续 Dream Cafe</button>
+    </section>
+  </div>;
 }
 
 function ProjectDesk({ projects, tasks, sessions, selectedProjectId, onAddProject, onAddTask, onDeleteProject, onDeleteSession, onDeleteTask, onSelectProject, onToggleTask, onUpdateProject, onUpdateTask }: { projects: Project[]; tasks: Task[]; sessions: FocusSession[]; selectedProjectId: string; onAddProject: (project: Omit<Project, 'id' | 'color'>) => void; onAddTask: (task: Omit<Task, 'id' | 'status'>) => void; onDeleteProject: (id: string) => void; onDeleteSession: (id: string) => void; onDeleteTask: (id: string) => void; onSelectProject: (id: string) => void; onToggleTask: (id: string) => void; onUpdateProject: (id: string, changes: Pick<Project, 'startDate' | 'endDate'>) => void; onUpdateTask: (id: string, changes: Pick<Task, 'startDate' | 'endDate'>) => void }) {

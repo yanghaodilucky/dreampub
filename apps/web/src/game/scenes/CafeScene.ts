@@ -81,6 +81,7 @@ export class CafeScene extends Scene {
   private unsubscribeStopped?: () => void;
   private npcSocket?: NpcSocket;
   private npcVisuals = new Map<string, NpcVisual>();
+  private npcSpeechBubbles = new Map<string, Phaser.GameObjects.Text>();
   private npcOccupiedSeats = new Set<string>();
   private npcPositionReportAt = 0;
   private unsubscribeNpcSend?: () => void;
@@ -482,9 +483,13 @@ export class CafeScene extends Scene {
   }
 
   private connectNpcs() {
+    // Scene restarts (for example, when the visual time mode changes) must
+    // never leave a second bridge listener or websocket alive.
+    this.npcSocket?.close();
+    this.unsubscribeNpcSend?.();
     this.npcSocket = new NpcSocket(
       (states) => this.applyNpcStates(states),
-      (npcId, content) => this.showNpcSpeech(npcId, content),
+      (npcId, content, eventId) => this.showNpcSpeech(npcId, content, eventId),
     );
     this.npcSocket.connect();
     this.unsubscribeNpcSend = gameBridge.on('npc.send', ({ content }) => this.npcSocket?.sendChat(content));
@@ -510,28 +515,47 @@ export class CafeScene extends Scene {
         if (occupiedSpot) this.npcOccupiedSeats.add(occupiedSpot.seatId);
       }
     });
+    gameBridge.emit('npc.states', states.map(({ actor_id, activity, visible }) => ({ npcId: actor_id, activity: activity ?? '休息', visible: visible ?? true })));
   }
 
   private updateNpcVisuals(delta: number) {
     const progress = Math.min(1, delta / 520);
-    this.npcVisuals.forEach((visual) => {
+    this.npcVisuals.forEach((visual, npcId) => {
       const x = PhaserMath.Linear(visual.body.x, visual.targetX, progress);
       const y = PhaserMath.Linear(visual.body.y, visual.targetY, progress);
       visual.body.setPosition(x, y);
       visual.name.setPosition(x, y + 18);
       visual.activity.setPosition(x, y + 34);
+      const bubble = this.npcSpeechBubbles.get(npcId);
+      bubble?.setPosition(x, y - 28);
     });
   }
 
-  private showNpcSpeech(npcId: string, content: string) {
+  private showNpcSpeech(npcId: string, content: string, eventId?: string) {
+    gameBridge.emit('npc.message', { npcId, content, eventId });
     const visual = this.npcVisuals.get(npcId);
     if (!visual) return;
-    const bubble = this.add.text(visual.body.x, visual.body.y - 16, content, {
-      color: '#3f3040', backgroundColor: '#fff1d0', fontFamily: 'sans-serif', fontSize: '12px',
-      padding: { x: 7, y: 5 }, wordWrap: { width: 210 }, align: 'center',
-    }).setOrigin(0.5, 1).setDepth(5);
-    this.tweens.add({ targets: bubble, alpha: 0, delay: 7500, duration: 900, onComplete: () => bubble.destroy() });
-    gameBridge.emit('npc.message', { npcId, content });
+    this.npcSpeechBubbles.get(npcId)?.destroy();
+    const bubble = this.add.text(visual.body.x, visual.body.y - 28, content.slice(0, 220), {
+      align: 'center',
+      backgroundColor: '#fff1d0',
+      color: '#493642',
+      fontFamily: 'sans-serif',
+      fontSize: '13px',
+      padding: { x: 10, y: 7 },
+      wordWrap: { width: 250, useAdvancedWrap: true },
+    }).setDepth(20).setOrigin(0.5, 1);
+    this.npcSpeechBubbles.set(npcId, bubble);
+    this.tweens.add({
+      targets: bubble,
+      alpha: 0,
+      delay: 5_500,
+      duration: 450,
+      onComplete: () => {
+        if (this.npcSpeechBubbles.get(npcId) === bubble) this.npcSpeechBubbles.delete(npcId);
+        bubble.destroy();
+      },
+    });
   }
 
   private createInput() {
@@ -643,10 +667,14 @@ export class CafeScene extends Scene {
 
   private cleanUp() {
     this.npcSocket?.close();
+    this.npcSocket = undefined;
     this.unsubscribeNpcSend?.();
+    this.unsubscribeNpcSend = undefined;
     this.unsubscribeFocus?.();
     this.unsubscribeLeave?.();
     this.unsubscribeStopped?.();
+    this.npcSpeechBubbles.forEach((bubble) => bubble.destroy());
+    this.npcSpeechBubbles.clear();
   }
 
   private getWorldTimeMode() {

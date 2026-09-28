@@ -22,13 +22,13 @@ apps/web/public/assets/
   characters/ maps/ furniture/ audio/
 
 apps/server/app/
-  main.py                  未来应用入口和 lifespan
+  main.py                  FastAPI 入口、NPC worker、世界和角色模板 API
   api/                     focus.py、projects.py、world.py、users.py、npc.py
   domains/
     focus/ projects/ world/ social/
   realtime/                websocket.py、room_manager.py
-  agents/                  runtime.py、perception.py、memory.py、policy.py、
-                           reflection.py、actions.py、prompts/
+  agents/                  当前的 DeepSeek 适配器与 NPC 运行档案；其余模块待实现
+  characters/              问卷、模板编译、版本校验与 JSON 存储
   db/
     models/ repository/    数据模型、事务与查询
   workers/                 npc_worker.py、持久事件分发
@@ -37,4 +37,4 @@ docs/                      产品、架构、角色与验收
 scripts/                   契约校验
 ```
 
-后续加入 server 迁移和测试目录、前端 package.json/锁文件、后端 pyproject.toml/锁文件，以及能实际启动 PostgreSQL 与应用的 docker-compose.yml。目前没有启动服务，故不先提交无法运行的 Compose 文件。
+目前已有 `apps/server/tests/`、前端锁文件、后端 `pyproject.toml` / `uv.lock`，以及可启动的单进程 FastAPI NPC 服务。数据库迁移、领域 API、Compose 和 PostgreSQL 仍待真实专注闭环阶段实现；在那之前不提交无法运行的数据库配置。
