@@ -4,7 +4,7 @@
 
 个人仓库：<https://github.com/yanghaodilucky/dreampub>。
 
-## v0.1.1 当前状态
+## v0.1.2 当前状态
 
 这是一个可本地运行、可部署演示的单人原型：React + Phaser 提供咖啡馆、项目／任务抽屉、本地专注记录和人物工作室；FastAPI 提供 Loopy 与 Evan 的实时作息、位置、聊天和人物模板 API。World Event / NPC Action / WebSocket 契约已确定。
 
@@ -69,14 +69,14 @@ uv run --with jsonschema==4.25.1 python scripts/validate_contracts.py
 
 ## 发布 GitHub 版本
 
-发布边界、已知限制与检查清单见 [v0.1.1 发布说明](docs/releases/v0.1.1.md)。GitHub Actions 会在推送和拉取请求时构建前端、运行后端测试和校验契约。
+发布边界、已知限制与检查清单见 [v0.1.2 发布说明](docs/releases/v0.1.2.md)。GitHub Actions 会在推送和拉取请求时构建前端、运行后端测试和校验契约。
 
 部署前端并连接远程服务时，在构建环境设置 `VITE_NPC_SERVER_URL=wss://your-npc-service.example.com/ws/world/dream-cafe`；前端会从它推导 HTTP API 地址。生产服务还必须将前端域名加入 `ALLOWED_ORIGINS`。
 
 确认 CI 通过且未暂存 `.env` 或密钥后，创建标签即可触发 GitHub Release 工作流：
 
 ```sh
-git tag -a v0.1.1 -m "DreamPub v0.1.1"
+git tag -a v0.1.2 -m "DreamPub v0.1.2"
 git push origin main --follow-tags
 ```
 

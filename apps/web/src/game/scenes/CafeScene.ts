@@ -4,7 +4,7 @@ import { NpcSocket, type NpcWorldState } from '../realtime/npcSocket';
 
 type Obstacle = { x: number; y: number; width: number; height: number };
 type NpcVisual = {
-  body: Phaser.GameObjects.Rectangle;
+  body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
   name: Phaser.GameObjects.Text;
   activity: Phaser.GameObjects.Text;
   targetX: number;
@@ -88,6 +88,14 @@ export class CafeScene extends Scene {
 
   constructor() {
     super('CafeScene');
+  }
+
+  preload() {
+    // These are project-owned transparent pixel sprites, derived from the
+    // supplied bead-pattern references. `pixelArt: true` in game config keeps
+    // their hard pixel edges when Phaser scales the canvas.
+    this.load.image('npc-evan', `${import.meta.env.BASE_URL}assets/characters/evan-v1.png`);
+    this.load.image('npc-loopy', `${import.meta.env.BASE_URL}assets/characters/loopy-v1.png`);
   }
 
   create() {
@@ -471,14 +479,16 @@ export class CafeScene extends Scene {
   private createPeople() {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    this.createPerson('loopy', 850, 205, 0xd18ba5, 'Loopy', '调咖啡');
-    this.createPerson('evan', 690, 500, 0x9ecc8b, 'Evan', '读报');
+    this.createPerson('loopy', 850, 205, 'npc-loopy', 0xd18ba5, 'Loopy', '调咖啡');
+    this.createPerson('evan', 690, 500, 'npc-evan', 0x9ecc8b, 'Evan', '读报');
   }
 
-  private createPerson(npcId: string, x: number, y: number, color: number, name: string, activity: string) {
-    const body = this.add.rectangle(x, y, PLAYER_SIZE, PLAYER_SIZE, color).setStrokeStyle(2, 0xfff5dc);
-    const nameText = this.add.text(x, y + 18, name, { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    const activityText = this.add.text(x, y + 34, activity, { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0);
+  private createPerson(npcId: string, x: number, y: number, texture: string, fallbackColor: number, name: string, activity: string) {
+    const body = this.textures.exists(texture)
+      ? this.add.image(x, y, texture).setDisplaySize(42, 58).setDepth(8)
+      : this.add.rectangle(x, y, PLAYER_SIZE, PLAYER_SIZE, fallbackColor).setStrokeStyle(2, 0xfff5dc).setDepth(8);
+    const nameText = this.add.text(x, y - 43, name, { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0).setDepth(9);
+    const activityText = this.add.text(x, y - 29, activity, { color: '#70484a', fontFamily: 'monospace', fontSize: '10px' }).setOrigin(0.5, 0).setDepth(9);
     this.npcVisuals.set(npcId, { body, name: nameText, activity: activityText, targetX: x, targetY: y });
   }
 
@@ -524,10 +534,10 @@ export class CafeScene extends Scene {
       const x = PhaserMath.Linear(visual.body.x, visual.targetX, progress);
       const y = PhaserMath.Linear(visual.body.y, visual.targetY, progress);
       visual.body.setPosition(x, y);
-      visual.name.setPosition(x, y + 18);
-      visual.activity.setPosition(x, y + 34);
+      visual.name.setPosition(x, y - 43);
+      visual.activity.setPosition(x, y - 29);
       const bubble = this.npcSpeechBubbles.get(npcId);
-      bubble?.setPosition(x, y - 28);
+      bubble?.setPosition(x, y - 52);
     });
   }
 
@@ -536,7 +546,7 @@ export class CafeScene extends Scene {
     const visual = this.npcVisuals.get(npcId);
     if (!visual) return;
     this.npcSpeechBubbles.get(npcId)?.destroy();
-    const bubble = this.add.text(visual.body.x, visual.body.y - 28, content.slice(0, 220), {
+    const bubble = this.add.text(visual.body.x, visual.body.y - 52, content.slice(0, 220), {
       align: 'center',
       backgroundColor: '#fff1d0',
       color: '#493642',
