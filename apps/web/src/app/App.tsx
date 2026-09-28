@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { PhaserGame } from '../game/PhaserGame';
 import { gameBridge, type FocusSpot, type NpcMessage, type NpcStatus } from '../game/bridge/GameBridge';
-import { compileCharacter, getCharacterVersions, pauseWorld, resumeWorld, saveCharacterPreview, type CharacterId, type CharacterTemplate, type CharacterVersion } from '../api/characterApi';
+import { compileCharacter, createCharacter, getCharacters, getCharacterVersions, pauseWorld, resumeWorld, saveCharacterPreview, type CharacterId, type CharacterProfile, type CharacterTemplate, type CharacterVersion } from '../api/characterApi';
+import { createProject as persistProject, createTask as persistTask, deleteFocusSession as removeFocusSession, deleteProject as removeProject, deleteTask as removeTask, loadLocalSave, startFocus as persistFocus, transitionFocus, updateProject as persistProjectUpdate, updateTask as persistTaskUpdate, type FocusSessionRecord, type ProjectRecord, type TaskRecord } from '../api/localGameApi';
+import { clearLlmKey, getLlmSettings, saveLlmSettings, testLlmConnection, type LlmSettings } from '../api/llmApi';
 
 type Drawer = 'tasks' | 'focus' | null;
 type Project = { id: string; name: string; color: string; startDate: string; endDate: string };
 type Task = { id: string; projectId: string; title: string; status: 'next' | 'done'; startDate: string; endDate: string };
-type FocusSession = { id: string; taskId: string; projectId: string; startedAt: string; durationSeconds: number };
+type FocusSession = { id: string; taskId: string; projectId: string; startedAt: string; runningSince: string | null; durationSeconds: number; state: 'running' | 'paused' | 'finished' | 'cancelled' };
 type ChatLine = NpcMessage & { id: string; name: string; receivedAt: number; speaker: 'npc' | 'player' };
 
 const COLORS = ['#f39a6b', '#8ac6a8', '#80b9dc', '#b89bd9', '#e8c26e', '#df8eb0'];
-const STORE = { projects: 'dreampub.projects', tasks: 'dreampub.tasks', sessions: 'dreampub.focus-sessions' };
 const CHARACTER_QUESTIONS = [
   { id: 'first_meeting', part: 'Part I · TA 是谁？', question: '你第一次遇见 TA，是在哪里？那一天发生了什么？' },
   { id: 'perfect_day', part: 'Part I · TA 是谁？', question: '如果 TA 可以完全按照自己的心意度过一天，那会是什么样的一天？' },
@@ -33,18 +34,20 @@ const addDays = (date: Date, days: number) => { const result = new Date(date); r
 const dateValue = (value: string) => new Date(`${value}T00:00:00`).getTime();
 const formatDuration = (seconds: number) => `${Math.floor(seconds / 3600) ? `${Math.floor(seconds / 3600)}h ` : ''}${Math.floor((seconds % 3600) / 60)}m`;
 const dateLabel = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-function readStored<T>(key: string, fallback: T): T { try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; } }
-function seedProjects() { const today = new Date(); return [{ id: 'project-dreampub', name: 'DreamPub 首版', color: COLORS[0], startDate: addDays(today, -4), endDate: addDays(today, 18) }]; }
-function seedTasks(projectId: string) { const today = new Date(); return [{ id: 'task-cafe', projectId, title: '完成 Dream Cafe 场景设计', status: 'next' as const, startDate: addDays(today, -3), endDate: addDays(today, 4) }, { id: 'task-memory', projectId, title: '整理 NPC 记忆设计', status: 'next' as const, startDate: addDays(today, 5), endDate: addDays(today, 12) }, { id: 'task-world-events', projectId, title: '确定 World Event 契约', status: 'done' as const, startDate: addDays(today, -4), endDate: addDays(today, -1) }]; }
+const projectFromRecord = (record: ProjectRecord): Project => ({ id: record.id, name: record.name, color: record.color, startDate: record.start_date, endDate: record.end_date });
+const taskFromRecord = (record: TaskRecord): Task => ({ id: record.id, projectId: record.project_id, title: record.title, status: record.status, startDate: record.start_date, endDate: record.end_date });
+const sessionFromRecord = (record: FocusSessionRecord): FocusSession => ({ id: record.id, taskId: record.task_id, projectId: record.project_id, startedAt: record.started_at, runningSince: record.running_since, durationSeconds: record.duration_seconds, state: record.state });
 
 export function App() {
-  const [projects, setProjects] = useState<Project[]>(() => readStored(STORE.projects, seedProjects()));
-  const [tasks, setTasks] = useState<Task[]>(() => readStored(STORE.tasks, seedTasks('project-dreampub')));
-  const [sessions, setSessions] = useState<FocusSession[]>(() => readStored(STORE.sessions, []));
-  const [selectedProjectId, setSelectedProjectId] = useState(() => projects[0]?.id ?? '');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [focusSpot, setFocusSpot] = useState<FocusSpot | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeFocusState, setActiveFocusState] = useState<FocusSession['state'] | null>(null);
   const [focusStartedAt, setFocusStartedAt] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gameError, setGameError] = useState<string | null>(null);
@@ -52,7 +55,8 @@ export function App() {
   const [npcStatuses, setNpcStatuses] = useState<NpcStatus[]>([]);
   const [characterStudioOpen, setCharacterStudioOpen] = useState(false);
   const [worldPaused, setWorldPaused] = useState(false);
-  const [characterId, setCharacterId] = useState<CharacterId>('evan');
+  const [characters, setCharacters] = useState<CharacterProfile[]>([]);
+  const [characterId, setCharacterId] = useState<CharacterId>('');
   const [characterAnswers, setCharacterAnswers] = useState<CharacterAnswers>(blankCharacterAnswers);
   const [characterStep, setCharacterStep] = useState(0);
   const [characterPreview, setCharacterPreview] = useState<CharacterTemplate | null>(null);
@@ -60,11 +64,39 @@ export function App() {
   const [characterVersions, setCharacterVersions] = useState<CharacterVersion[]>([]);
   const [characterBusy, setCharacterBusy] = useState(false);
   const [characterError, setCharacterError] = useState<string | null>(null);
+  const [llmSettingsOpen, setLlmSettingsOpen] = useState(false);
+  const [llmSettings, setLlmSettings] = useState<LlmSettings | null>(null);
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmMessage, setLlmMessage] = useState<string | null>(null);
   const activeTask = useMemo(() => tasks.find((task) => task.id === activeTaskId) ?? null, [activeTaskId, tasks]);
   const remainingTasks = tasks.filter((task) => task.status === 'next');
-  useEffect(() => { window.localStorage.setItem(STORE.projects, JSON.stringify(projects)); }, [projects]);
-  useEffect(() => { window.localStorage.setItem(STORE.tasks, JSON.stringify(tasks)); }, [tasks]);
-  useEffect(() => { window.localStorage.setItem(STORE.sessions, JSON.stringify(sessions)); }, [sessions]);
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    const hydrate = async (attempt = 0) => {
+      try {
+        const [save, roster] = await Promise.all([loadLocalSave(), getCharacters()]);
+        if (cancelled) return;
+        const loadedProjects = save.projects.map(projectFromRecord);
+        const loadedTasks = save.tasks.map(taskFromRecord);
+        setProjects(loadedProjects); setTasks(loadedTasks); setSessions(save.focus_sessions.map(sessionFromRecord)); setSelectedProjectId(loadedProjects[0]?.id ?? ''); setCharacters(roster.characters); setCharacterId((current) => current || roster.characters[0]?.id || ''); setGameError(null);
+        if (save.active_focus_session) {
+          const active = sessionFromRecord(save.active_focus_session);
+          setActiveSessionId(active.id); setActiveTaskId(active.taskId); setActiveFocusState(active.state); setFocusStartedAt(active.runningSince ? new Date(active.runningSince) : null); setElapsedSeconds(active.durationSeconds);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (attempt < 20) {
+          retryTimer = window.setTimeout(() => { void hydrate(attempt + 1); }, 500);
+          return;
+        }
+        setGameError(error instanceof Error ? error.message : '本地游戏服务未启动。');
+      }
+    };
+    void hydrate();
+    return () => { cancelled = true; if (retryTimer) window.clearTimeout(retryTimer); };
+  }, []);
   useEffect(() => gameBridge.on('focus.open', (spot) => { setFocusSpot(spot); setDrawer('focus'); }), []);
   useEffect(() => gameBridge.on('focus.closed', () => { setFocusSpot(null); setDrawer(null); }), []);
   useEffect(() => gameBridge.on('tasks.open', () => setDrawer('tasks')), []);
@@ -78,34 +110,93 @@ export function App() {
       || (line.npcId === npcId && line.content === content && now - line.receivedAt < 10_000),
     );
     if (duplicate) return current;
-    return [...current, { id: crypto.randomUUID(), npcId, content, eventId, name: npcId === 'evan' ? 'Evan' : 'Loopy', receivedAt: now, speaker: 'npc' as const }].slice(-100);
-  })), []);
+    return [...current, { id: crypto.randomUUID(), npcId, content, eventId, name: characters.find((character) => character.id === npcId)?.name ?? 'NPC', receivedAt: now, speaker: 'npc' as const }].slice(-100);
+  })), [characters]);
   useEffect(() => gameBridge.on('npc.send', ({ content }) => setChatLines((current) => [...current, {
     id: crypto.randomUUID(), npcId: 'user', content, name: '你', receivedAt: Date.now(), speaker: 'player' as const,
   }].slice(-100))), []);
   useEffect(() => gameBridge.on('npc.states', setNpcStatuses), []);
-  useEffect(() => { if (!focusStartedAt) return; const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - focusStartedAt.getTime()) / 1000)), 1000); return () => window.clearInterval(interval); }, [focusStartedAt]);
-  const startFocus = (task: Task) => { if (!focusSpot) return; setActiveTaskId(task.id); setFocusStartedAt(new Date()); setElapsedSeconds(0); gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId }); };
-  const stopFocus = () => { if (activeTask && focusStartedAt) setSessions((current) => [...current, { id: crypto.randomUUID(), taskId: activeTask.id, projectId: activeTask.projectId, startedAt: focusStartedAt.toISOString(), durationSeconds: Math.max(1, elapsedSeconds) }]); gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveTaskId(null); };
+  useEffect(() => {
+    if (!focusStartedAt || !activeSessionId || activeFocusState !== 'running') return;
+    const started = focusStartedAt.getTime();
+    const base = elapsedSeconds;
+    const tick = () => setElapsedSeconds(base + Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [focusStartedAt, activeSessionId, activeFocusState]);
+  const reportGameError = (error: unknown) => setGameError(error instanceof Error ? error.message : '本地存档操作失败。');
+  const startFocus = async (task: Task) => {
+    if (!focusSpot) return;
+    try {
+      const record = await persistFocus(task.id, focusSpot.seatId);
+      const session = sessionFromRecord(record);
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]); setActiveSessionId(session.id); setActiveTaskId(task.id); setActiveFocusState(session.state); setFocusStartedAt(session.runningSince ? new Date(session.runningSince) : null); setElapsedSeconds(session.durationSeconds);
+      gameBridge.emit('focus.started', { taskId: task.id, taskTitle: task.title, seatId: focusSpot.seatId });
+    } catch (error) { reportGameError(error); }
+  };
+  const stopFocus = async () => {
+    if (!activeSessionId) return;
+    try {
+      const session = sessionFromRecord(await transitionFocus(activeSessionId, 'finish'));
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]); gameBridge.emit('focus.stopped', undefined); setFocusStartedAt(null); setActiveFocusState(null); setActiveTaskId(null); setActiveSessionId(null);
+    } catch (error) { reportGameError(error); }
+  };
+  const toggleFocusPause = async () => {
+    if (!activeSessionId || !activeFocusState) return;
+    const action = activeFocusState === 'running' ? 'pause' : 'resume';
+    try {
+      const session = sessionFromRecord(await transitionFocus(activeSessionId, action));
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+      setActiveFocusState(session.state); setFocusStartedAt(session.runningSince ? new Date(session.runningSince) : null); setElapsedSeconds(session.durationSeconds);
+    } catch (error) { reportGameError(error); }
+  };
   const leaveSeat = () => { gameBridge.emit('focus.leave', undefined); setFocusSpot(null); setDrawer(null); };
-  const toggleTask = (taskId: string) => setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status: task.status === 'done' ? 'next' : 'done' } : task));
-  const addProject = (project: Omit<Project, 'id' | 'color'>) => { const item = { ...project, id: crypto.randomUUID(), color: COLORS[projects.length % COLORS.length] }; setProjects((current) => [...current, item]); setSelectedProjectId(item.id); };
-  const addTask = (task: Omit<Task, 'id' | 'status'>) => setTasks((current) => [...current, { ...task, id: crypto.randomUUID(), status: 'next' }]);
-  const updateProject = (projectId: string, changes: Pick<Project, 'startDate' | 'endDate'>) => setProjects((current) => current.map((project) => project.id === projectId ? { ...project, ...changes } : project));
-  const updateTask = (taskId: string, changes: Pick<Task, 'startDate' | 'endDate'>) => setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...changes } : task));
-  const deleteProject = (projectId: string) => {
+  const toggleTask = async (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId); if (!task) return;
+    try { const updated = taskFromRecord(await persistTaskUpdate(taskId, { status: task.status === 'done' ? 'next' : 'done' })); setTasks((current) => current.map((item) => item.id === taskId ? updated : item)); } catch (error) { reportGameError(error); }
+  };
+  const addProject = async (project: Omit<Project, 'id' | 'color'>) => {
+    try { const item = projectFromRecord(await persistProject({ name: project.name, color: COLORS[projects.length % COLORS.length], start_date: project.startDate, end_date: project.endDate })); setProjects((current) => [...current, item]); setSelectedProjectId(item.id); } catch (error) { reportGameError(error); }
+  };
+  const addTask = async (task: Omit<Task, 'id' | 'status'>) => {
+    try { const item = taskFromRecord(await persistTask({ project_id: task.projectId, title: task.title, start_date: task.startDate, end_date: task.endDate })); setTasks((current) => [...current, item]); } catch (error) { reportGameError(error); }
+  };
+  const updateProject = async (projectId: string, changes: Pick<Project, 'startDate' | 'endDate'>) => {
+    try { const updated = projectFromRecord(await persistProjectUpdate(projectId, { start_date: changes.startDate, end_date: changes.endDate })); setProjects((current) => current.map((item) => item.id === projectId ? updated : item)); } catch (error) { reportGameError(error); }
+  };
+  const updateTask = async (taskId: string, changes: Pick<Task, 'startDate' | 'endDate'>) => {
+    try { const updated = taskFromRecord(await persistTaskUpdate(taskId, { start_date: changes.startDate, end_date: changes.endDate })); setTasks((current) => current.map((item) => item.id === taskId ? updated : item)); } catch (error) { reportGameError(error); }
+  };
+  const deleteProject = async (projectId: string) => {
     if (projects.length < 2 || !window.confirm('删除项目会一并删除其中的任务和专注记录，继续吗？')) return;
     const remaining = projects.filter((project) => project.id !== projectId);
-    setProjects(remaining); setTasks((current) => current.filter((task) => task.projectId !== projectId)); setSessions((current) => current.filter((session) => session.projectId !== projectId));
-    setSelectedProjectId(remaining[0]?.id ?? '');
+    try { await removeProject(projectId); setProjects(remaining); setTasks((current) => current.filter((task) => task.projectId !== projectId)); setSessions((current) => current.filter((session) => session.projectId !== projectId)); setSelectedProjectId(remaining[0]?.id ?? ''); } catch (error) { reportGameError(error); }
   };
-  const deleteTask = (taskId: string) => {
+  const deleteTask = async (taskId: string) => {
     if (!window.confirm('删除这个任务及其专注记录吗？')) return;
-    setTasks((current) => current.filter((task) => task.id !== taskId)); setSessions((current) => current.filter((session) => session.taskId !== taskId));
+    try { await removeTask(taskId); setTasks((current) => current.filter((task) => task.id !== taskId)); setSessions((current) => current.filter((session) => session.taskId !== taskId)); } catch (error) { reportGameError(error); }
   };
-  const deleteSession = (sessionId: string) => { if (window.confirm('删除这段专注记录吗？')) setSessions((current) => current.filter((session) => session.id !== sessionId)); };
+  const deleteSession = async (sessionId: string) => { if (window.confirm('删除这段专注记录吗？')) try { await removeFocusSession(sessionId); setSessions((current) => current.filter((session) => session.id !== sessionId)); } catch (error) { reportGameError(error); } };
   const loadCharacterVersions = async (id: CharacterId) => { const result = await getCharacterVersions(id); setCharacterVersions(result.versions); };
+  const openLlmSettings = async () => {
+    setLlmSettingsOpen(true); setLlmBusy(true); setLlmMessage(null);
+    try { setLlmSettings(await getLlmSettings()); } catch (error) { setLlmMessage(error instanceof Error ? error.message : '无法读取模型设置。'); } finally { setLlmBusy(false); }
+  };
+  const saveLlmSettingsFromPanel = async (model: string, baseUrl: string) => {
+    setLlmBusy(true); setLlmMessage(null);
+    try { const saved = await saveLlmSettings({ model, base_url: baseUrl, ...(llmApiKey.trim() ? { api_key: llmApiKey.trim() } : {}) }); setLlmSettings(saved); setLlmApiKey(''); setLlmMessage('已保存到这台 Mac 的 Keychain。'); } catch (error) { setLlmMessage(error instanceof Error ? error.message : '无法保存模型设置。'); } finally { setLlmBusy(false); }
+  };
+  const testLlmSettings = async () => {
+    setLlmBusy(true); setLlmMessage(null);
+    try { const result = await testLlmConnection(); setLlmMessage(result.message); } catch (error) { setLlmMessage(error instanceof Error ? error.message : '无法测试模型连接。'); } finally { setLlmBusy(false); }
+  };
+  const removeLlmKey = async () => {
+    setLlmBusy(true); setLlmMessage(null);
+    try { setLlmSettings(await clearLlmKey()); setLlmApiKey(''); setLlmMessage('已从 macOS Keychain 移除 API Key。'); } catch (error) { setLlmMessage(error instanceof Error ? error.message : '无法清除 API Key。'); } finally { setLlmBusy(false); }
+  };
   const openCharacterStudio = async () => {
+    if (!characterId) return;
     setCharacterStudioOpen(true); setCharacterBusy(true); setCharacterError(null); setCharacterPreview(null); setCharacterSaved(false); setCharacterStep(0);
     try { await pauseWorld(); setWorldPaused(true); await loadCharacterVersions(characterId); } catch (error) { setCharacterError(error instanceof Error ? error.message : '无法暂停世界或读取角色。'); } finally { setCharacterBusy(false); }
   };
@@ -116,6 +207,14 @@ export function App() {
   const selectCharacter = async (id: CharacterId) => {
     setCharacterId(id); setCharacterAnswers(blankCharacterAnswers()); setCharacterStep(0); setCharacterPreview(null); setCharacterSaved(false); setCharacterError(null); setCharacterBusy(true);
     try { await loadCharacterVersions(id); } catch (error) { setCharacterError(error instanceof Error ? error.message : '无法读取角色版本。'); } finally { setCharacterBusy(false); }
+  };
+  const addCharacter = async (profile: Pick<CharacterProfile, 'name' | 'color' | 'role' | 'archetype'>) => {
+    setCharacterBusy(true); setCharacterError(null);
+    try {
+      const created = await createCharacter(profile);
+      setCharacters((current) => [...current, created]);
+      await selectCharacter(created.id);
+    } catch (error) { setCharacterError(error instanceof Error ? error.message : '无法创建角色。'); setCharacterBusy(false); }
   };
   const generateCharacterPreview = async () => {
     if (Object.values(characterAnswers).some((answer) => !answer.trim())) return;
@@ -131,32 +230,46 @@ export function App() {
   return <main className="cafe-shell">
     <section className="cafe-world" id="dream-cafe" aria-label="Dream Cafe 小世界">
       <PhaserGame />
-      <header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button><button className={characterStudioOpen ? 'toolbar-button active' : 'toolbar-button'} onClick={openCharacterStudio}>✦ 人物</button></div></header>
-      <div className="world-caption"><span>{npcStatus('loopy', 'Loopy')}</span><span>{npcStatus('evan', 'Evan')}</span>{worldPaused && <span className="paused-caption">Ⅱ 世界暂停中</span>}</div>
+      <header className="world-toolbar"><a className="brand" href="#dream-cafe" aria-label="Dream Cafe 主页">DREAM<span>CAFE</span></a><div className="toolbar-actions"><button className={drawer === 'tasks' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'tasks' ? null : 'tasks')}>▤ 项目</button><button className={drawer === 'focus' ? 'toolbar-button active' : 'toolbar-button'} onClick={() => setDrawer(drawer === 'focus' ? null : 'focus')}>◷ 专注</button><button className={characterStudioOpen ? 'toolbar-button active' : 'toolbar-button'} onClick={openCharacterStudio}>✦ 人物</button><button className={llmSettingsOpen ? 'toolbar-button active' : 'toolbar-button'} onClick={openLlmSettings}>⚙ AI</button></div></header>
+      <div className="world-caption">{characters.map((character) => <span key={character.id}>{npcStatus(character.id, character.name)}</span>)}{worldPaused && <span className="paused-caption">Ⅱ 世界暂停中</span>}</div>
       <NpcChat lines={chatLines} />
       {gameError && <p className="game-error">Dream Cafe 无法初始化：{gameError}</p>}
     </section>
     {drawer && <button className="drawer-scrim" aria-label="关闭侧栏" onClick={() => setDrawer(null)} />}
-    <aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onStart={startFocus} />}</aside>
-    {characterStudioOpen && <CharacterStudio characterId={characterId} answers={characterAnswers} step={characterStep} preview={characterPreview} saved={characterSaved} versions={characterVersions} busy={characterBusy} error={characterError} onSelectCharacter={selectCharacter} onAnswer={(id, value) => setCharacterAnswers((current) => ({ ...current, [id]: value }))} onStep={setCharacterStep} onPreview={generateCharacterPreview} onEdit={() => { setCharacterPreview(null); setCharacterSaved(false); setCharacterStep(CHARACTER_QUESTIONS.length - 1); }} onSave={saveCharacter} onResume={closeCharacterStudio} />}
+    <aside className={drawer ? 'side-drawer open' : 'side-drawer'} aria-hidden={!drawer}><div className="drawer-header"><div><p className="eyebrow">{drawer === 'tasks' ? 'PROJECT DESK' : 'FOCUS'}</p><h1>{drawer === 'tasks' ? '项目工作台' : activeTask ? activeFocusState === 'paused' ? '专注已暂停' : '正在专注' : '准备坐下'}</h1></div><button className="close-button" onClick={() => setDrawer(null)} aria-label="关闭">×</button></div>{drawer === 'tasks' && <ProjectDesk projects={projects} tasks={tasks} sessions={sessions} selectedProjectId={selectedProjectId} onAddProject={addProject} onAddTask={addTask} onDeleteProject={deleteProject} onDeleteSession={deleteSession} onDeleteTask={deleteTask} onSelectProject={setSelectedProjectId} onToggleTask={toggleTask} onUpdateProject={updateProject} onUpdateTask={updateTask} />}{drawer === 'focus' && <FocusDrawer activeTask={activeTask} activeState={activeFocusState} elapsedSeconds={elapsedSeconds} focusSpot={focusSpot} tasks={remainingTasks} projects={projects} onLeave={leaveSeat} onStop={stopFocus} onTogglePause={toggleFocusPause} onStart={startFocus} />}</aside>
+    {characterStudioOpen && <CharacterStudio characters={characters} characterId={characterId} answers={characterAnswers} step={characterStep} preview={characterPreview} saved={characterSaved} versions={characterVersions} busy={characterBusy} error={characterError} onCreate={addCharacter} onSelectCharacter={selectCharacter} onAnswer={(id, value) => setCharacterAnswers((current) => ({ ...current, [id]: value }))} onStep={setCharacterStep} onPreview={generateCharacterPreview} onEdit={() => { setCharacterPreview(null); setCharacterSaved(false); setCharacterStep(CHARACTER_QUESTIONS.length - 1); }} onSave={saveCharacter} onResume={closeCharacterStudio} />}
+    {llmSettingsOpen && <LlmSettingsPanel settings={llmSettings} apiKey={llmApiKey} busy={llmBusy} message={llmMessage} onApiKey={setLlmApiKey} onClose={() => setLlmSettingsOpen(false)} onClear={removeLlmKey} onSave={saveLlmSettingsFromPanel} onTest={testLlmSettings} />}
   </main>;
+}
+
+function LlmSettingsPanel({ settings, apiKey, busy, message, onApiKey, onClose, onClear, onSave, onTest }: { settings: LlmSettings | null; apiKey: string; busy: boolean; message: string | null; onApiKey: (value: string) => void; onClose: () => void; onClear: () => void; onSave: (model: string, baseUrl: string) => void; onTest: () => void }) {
+  const [model, setModel] = useState(settings?.model ?? 'deepseek-chat');
+  const [baseUrl, setBaseUrl] = useState(settings?.base_url ?? 'https://api.deepseek.com');
+  useEffect(() => { if (settings) { setModel(settings.model); setBaseUrl(settings.base_url); } }, [settings]);
+  return <div className="character-studio-backdrop" role="dialog" aria-modal="true" aria-label="AI 模型设置"><section className="character-studio llm-settings"><header><div><p className="eyebrow">LOCAL AI SETTINGS</p><h1>让 NPC 使用你的模型。</h1><p>API Key 只保存到这台 Mac 的 Keychain，永远不会写入游戏存档、GitHub 仓库或前端文件。</p></div><button className="close-button" disabled={busy} onClick={onClose} aria-label="关闭">×</button></header><div className="character-question"><label>兼容 OpenAI 的 API 地址<input value={baseUrl} disabled={busy} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://api.deepseek.com" /></label><label>模型名称<input value={model} disabled={busy} onChange={(event) => setModel(event.target.value)} placeholder="deepseek-chat" /></label><label>API Key<input type="password" value={apiKey} disabled={busy} onChange={(event) => onApiKey(event.target.value)} placeholder={settings?.configured ? '已配置；留空则不更改' : '粘贴你自己的 API Key'} autoComplete="new-password" /></label></div><p className="llm-status">{settings?.configured ? `已配置 · ${settings.key_in_keychain ? 'Keychain 已保护' : '来自仅开发环境变量'}` : '未配置：NPC 将使用离线规则与本地回退对话。'}</p>{message && <p className="character-error">{message}</p>}<footer><button className="secondary-button" disabled={busy || !settings?.configured} onClick={onClear}>移除 Key</button><button className="secondary-button" disabled={busy || !settings?.configured} onClick={onTest}>测试连接</button><button className="primary-button" disabled={busy || !model.trim() || !baseUrl.trim() || (!settings?.configured && !apiKey.trim())} onClick={() => onSave(model.trim(), baseUrl.trim())}>{busy ? '处理中…' : '保存到本机 Keychain'}</button></footer></section></div>;
 }
 
 function NpcChat({ lines }: { lines: ChatLine[] }) {
   const [collapsed, setCollapsed] = useState(false);
   const [content, setContent] = useState('');
   const send = (event: FormEvent) => { event.preventDefault(); if (!content.trim()) return; gameBridge.emit('npc.send', { content: content.trim() }); setContent(''); };
-  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-heading"><span>{collapsed ? '对话记录已收起' : '附近的 NPC'}</span><button type="button" onClick={() => setCollapsed((current) => !current)}>{collapsed ? '展开记录' : '收起'}</button></div>{!collapsed && <div className="npc-chat-history">{lines.map((line) => <p key={line.id} className={line.speaker === 'player' ? 'player-message' : undefined}>{line.speaker === 'player' ? <>{line.content}<strong>{line.name}</strong></> : <><strong>{line.name}</strong>{line.content}</>}</p>)}</div>}<form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 Loopy 或 Evan 说什么？" maxLength={800} /><button>发送</button></form></section>;
+  return <section className="npc-chat" aria-label="与咖啡馆 NPC 对话"><div className="npc-chat-heading"><span>{collapsed ? '对话记录已收起' : '附近的 NPC'}</span><button type="button" onClick={() => setCollapsed((current) => !current)}>{collapsed ? '展开记录' : '收起'}</button></div>{!collapsed && <div className="npc-chat-history">{lines.map((line) => <p key={line.id} className={line.speaker === 'player' ? 'player-message' : undefined}>{line.speaker === 'player' ? <>{line.content}<strong>{line.name}</strong></> : <><strong>{line.name}</strong>{line.content}</>}</p>)}</div>}<form onSubmit={send}><input value={content} onChange={(event) => setContent(event.target.value)} placeholder="想对附近的 NPC 说什么？" maxLength={800} /><button>发送</button></form></section>;
 }
 
-function CharacterStudio({ characterId, answers, step, preview, saved, versions, busy, error, onSelectCharacter, onAnswer, onStep, onPreview, onEdit, onSave, onResume }: { characterId: CharacterId; answers: CharacterAnswers; step: number; preview: CharacterTemplate | null; saved: boolean; versions: CharacterVersion[]; busy: boolean; error: string | null; onSelectCharacter: (id: CharacterId) => void; onAnswer: (id: CharacterQuestionId, value: string) => void; onStep: (step: number) => void; onPreview: () => void; onEdit: () => void; onSave: () => void; onResume: () => void }) {
+function CharacterStudio({ characters, characterId, answers, step, preview, saved, versions, busy, error, onCreate, onSelectCharacter, onAnswer, onStep, onPreview, onEdit, onSave, onResume }: { characters: CharacterProfile[]; characterId: CharacterId; answers: CharacterAnswers; step: number; preview: CharacterTemplate | null; saved: boolean; versions: CharacterVersion[]; busy: boolean; error: string | null; onCreate: (profile: Pick<CharacterProfile, 'name' | 'color' | 'role' | 'archetype'>) => void; onSelectCharacter: (id: CharacterId) => void; onAnswer: (id: CharacterQuestionId, value: string) => void; onStep: (step: number) => void; onPreview: () => void; onEdit: () => void; onSave: () => void; onResume: () => void }) {
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('Dream Cafe 的常客');
+  const [newArchetype, setNewArchetype] = useState<'staff' | 'guest'>('guest');
+  const create = (event: FormEvent) => { event.preventDefault(); if (!newName.trim() || !newRole.trim()) return; onCreate({ name: newName.trim(), role: newRole.trim(), archetype: newArchetype, color: newArchetype === 'staff' ? '#e7a4bd' : '#8cb8d7' }); setCreating(false); setNewName(''); };
   const item = CHARACTER_QUESTIONS[step];
   const complete = Object.values(answers).every((answer) => answer.trim());
   const active = versions.find((version) => version.is_active);
   return <div className="character-studio-backdrop" role="dialog" aria-modal="true" aria-label="角色塑造问卷">
     <section className="character-studio">
       <header><div><p className="eyebrow">WORLD PAUSED · CHARACTER QUESTIONNAIRE V2</p><h1>在这里，慢慢认识 TA。</h1><p>世界已经暂停。你的答案只定义角色最初的样子，不会决定 TA 以后每一次行动。</p></div><button className="close-button" disabled={busy} onClick={onResume} aria-label="继续世界">×</button></header>
-      <div className="character-picker"><button className={characterId === 'evan' ? 'active' : ''} disabled={busy} onClick={() => onSelectCharacter('evan')}>Evan</button><button className={characterId === 'loopy' ? 'active' : ''} disabled={busy} onClick={() => onSelectCharacter('loopy')}>Loopy</button><span>当前版本 {active ? `v${active.version}` : '读取中'}</span></div>
+      <div className="character-picker">{characters.map((character) => <button key={character.id} className={characterId === character.id ? 'active' : ''} disabled={busy} onClick={() => onSelectCharacter(character.id)}>{character.name}</button>)}<button disabled={busy || characters.length >= 6} onClick={() => setCreating((open) => !open)}>{creating ? '取消新增' : '+ 新 NPC'}</button><span>当前版本 {active ? `v${active.version}` : '读取中'}</span></div>
+      {creating && <form className="inline-form npc-create-form" onSubmit={create}><input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="NPC 名称" maxLength={40} autoFocus /><input value={newRole} onChange={(event) => setNewRole(event.target.value)} placeholder="角色身份，例如常客" maxLength={80} /><label><select value={newArchetype} onChange={(event) => { const archetype = event.target.value as 'staff' | 'guest'; setNewArchetype(archetype); setNewRole(archetype === 'staff' ? 'Dream Cafe 的咖啡店员' : 'Dream Cafe 的常客'); }}><option value="guest">常客（读书、工作）</option><option value="staff">店员（调咖啡、打扫）</option></select></label><button className="mini-primary" disabled={busy || !newName.trim() || !newRole.trim()}>加入咖啡馆</button></form>}
       {!preview ? <div className="question-flow"><div className="question-progress"><span>{item.part}</span><strong>{step + 1} / {CHARACTER_QUESTIONS.length}</strong></div><h2>{item.question}</h2><textarea value={answers[item.id]} disabled={busy} onChange={(event) => onAnswer(item.id, event.target.value)} placeholder="用你自己的话回答，不需要写得像设定集。" maxLength={1500} autoFocus />{error && <p className="character-error">{error}</p>}<footer><button className="secondary-button" disabled={busy || step === 0} onClick={() => onStep(step - 1)}>上一步</button>{step < CHARACTER_QUESTIONS.length - 1 ? <button className="primary-button" disabled={busy || !answers[item.id].trim()} onClick={() => onStep(step + 1)}>下一题</button> : <button className="primary-button" disabled={busy || !complete} onClick={onPreview}>{busy ? '正在生成…' : '生成角色与醒来第一句话'}</button>}</footer></div> : <div className="character-preview"><p className="eyebrow">AWAKENING</p><blockquote>“{preview.awakening.first_message}”</blockquote><small>{preview.awakening.used_fallback ? '由离线回退生成' : `由 ${preview.awakening.generator} 生成`}</small><section><h2>{preview.display_name} 的初始轮廓</h2><p>{preview.core_identity.summary}</p><h3>珍惜的事</h3><ul>{preview.core_identity.values.map((value) => <li key={value}>{value}</li>)}</ul><h3>与你的已知开始</h3><p>{preview.player_relationship.known_history}</p></section>{saved && <p className="character-saved">已保存为当前版本。你可以继续 Dream Cafe。</p>}{error && <p className="character-error">{error}</p>}<footer><button className="secondary-button" disabled={busy || saved} onClick={onEdit}>返回修改</button><button className="primary-button" disabled={busy || saved} onClick={onSave}>{saved ? '已保存' : busy ? '正在保存…' : '确认保存为新版本'}</button></footer></div>}
       <div className="character-history"><strong>版本历史</strong>{versions.map((version) => <span key={version.version} className={version.is_active ? 'active' : ''}>v{version.version}{version.is_active ? ' · 当前' : ''}</span>)}</div>
       <button className="resume-world" disabled={busy} onClick={onResume}>继续 Dream Cafe</button>
@@ -194,4 +307,4 @@ function PieCard<T extends { id: string }>({ title, records, items, getId, getNa
 
 function ContributionHeatmap({ sessions }: { sessions: FocusSession[] }) { const minutes = new Map<string, number>(); sessions.forEach((session) => { const day = dateKey(new Date(session.startedAt)); minutes.set(day, (minutes.get(day) ?? 0) + session.durationSeconds / 60); }); const today = new Date(); const days = Array.from({ length: 364 }, (_, index) => addDays(today, index - 363)); const intensity = (day: string) => { const value = minutes.get(day) ?? 0; return value === 0 ? 0 : value < 15 ? 1 : value < 45 ? 2 : value < 120 ? 3 : 4; }; const active = days.filter((day) => intensity(day) > 0); let streak = 0; let longest = 0; let current = 0; days.forEach((day) => { if (intensity(day)) { current += 1; longest = Math.max(longest, current); } else current = 0; }); for (let index = days.length - 1; index >= 0 && intensity(days[index]); index -= 1) streak += 1; const months = Array.from(new Set(days.map((day) => new Date(`${day}T00:00:00`).toLocaleDateString('zh-CN', { month: 'short' })))); return <div className="contribution"><div className="contribution-title"><h3>专注连续性</h3><span>{active.length} 个活跃日 · 连续 {streak} 天 · 最长 {longest} 天</span></div><div className="months">{months.map((month) => <span key={month}>{month}</span>)}</div><div className="heatmap">{days.map((day) => <i key={day} className={`heat-${intensity(day)}`} title={`${day} · ${Math.round(minutes.get(day) ?? 0)} 分钟`} />)}</div><div className="heat-legend"><span>少</span><i className="heat-0" /><i className="heat-1" /><i className="heat-2" /><i className="heat-3" /><i className="heat-4" /><span>多</span></div></div>; }
 
-function FocusDrawer({ activeTask, elapsedSeconds, focusSpot, tasks, projects, onLeave, onStop, onStart }: { activeTask: Task | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; projects: Project[]; onLeave: () => void; onStop: () => void; onStart: (task: Task) => void }) { if (activeTask) return <div className="focus-active"><div className="focus-clock">{formatDuration(elapsedSeconds)}</div><p className="focus-label">正在专注</p><h2>{activeTask.title}</h2><p className="seat-label">你坐在{focusSpot?.label ?? 'Dream Cafe'}。</p><button className="secondary-button" onClick={onStop}>结束这次专注并记录</button></div>; if (!focusSpot) return <div className="empty-focus"><div className="coffee-mark">☕</div><h2>先选一张咖啡桌</h2><p>点击窗边桌、中央长桌，或走到旁边按 E。选座后，这里会显示项目中的任务。</p></div>; return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择任务开始计时；结束时会自动写入项目、任务、日报和贡献格。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{projects.find((project) => project.id === task.projectId)?.name ?? '未分类项目'}</span>{task.title}</button>)}</div><button className="secondary-button leave-seat-button" onClick={onLeave}>离开座位</button></div>; }
+function FocusDrawer({ activeTask, activeState, elapsedSeconds, focusSpot, tasks, projects, onLeave, onStop, onTogglePause, onStart }: { activeTask: Task | null; activeState: FocusSession['state'] | null; elapsedSeconds: number; focusSpot: FocusSpot | null; tasks: Task[]; projects: Project[]; onLeave: () => void; onStop: () => void; onTogglePause: () => void; onStart: (task: Task) => void }) { if (activeTask) return <div className="focus-active"><div className="focus-clock">{formatDuration(elapsedSeconds)}</div><p className="focus-label">{activeState === 'paused' ? '专注已暂停' : '正在专注'}</p><h2>{activeTask.title}</h2><p className="seat-label">你坐在{focusSpot?.label ?? 'Dream Cafe'}。</p><button className="secondary-button" onClick={onTogglePause}>{activeState === 'paused' ? '继续计时' : '暂停计时'}</button><button className="secondary-button" onClick={onStop}>结束这次专注并记录</button></div>; if (!focusSpot) return <div className="empty-focus"><div className="coffee-mark">☕</div><h2>先选一张咖啡桌</h2><p>点击窗边桌、中央长桌，或走到旁边按 E。选座后，这里会显示项目中的任务。</p></div>; return <div className="focus-setup"><div className="focus-spot">{focusSpot.label}</div><h2>在这里待一会儿吧。</h2><p>选择任务开始计时；结束时会自动写入项目、任务、日报和贡献格。</p><div className="focus-task-options">{tasks.map((task) => <button key={task.id} onClick={() => onStart(task)}><span>{projects.find((project) => project.id === task.projectId)?.name ?? '未分类项目'}</span>{task.title}</button>)}</div><button className="secondary-button leave-seat-button" onClick={onLeave}>离开座位</button></div>; }

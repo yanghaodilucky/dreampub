@@ -6,5 +6,14 @@ dist/
 apps/server/.env
 apps/server/.venv/
 apps/server/data/characters/
+apps/desktop/src-tauri/binaries/dreampub-server-*
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/icons/android/
+apps/desktop/src-tauri/icons/ios/
+apps/desktop/src-tauri/icons/*.png
+apps/desktop/src-tauri/icons/*.ico
+apps/desktop/src-tauri/icons/Square*.png
+apps/desktop/src-tauri/icons/StoreLogo.png
 __pycache__/
 *.pyc

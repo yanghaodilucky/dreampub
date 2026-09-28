@@ -471,8 +471,6 @@ export class CafeScene extends Scene {
   private createPeople() {
     this.player = this.add.rectangle(292, 335, PLAYER_SIZE, PLAYER_SIZE, 0x67b7d1).setStrokeStyle(2, 0xfff5dc);
     this.playerLabel = this.add.text(292, 353, 'You', { color: '#fff4d8', fontFamily: 'monospace', fontSize: '12px' }).setOrigin(0.5, 0);
-    this.createPerson('loopy', 850, 205, 0xd18ba5, 'Loopy', '调咖啡');
-    this.createPerson('evan', 690, 500, 0x9ecc8b, 'Evan', '读报');
   }
 
   private createPerson(npcId: string, x: number, y: number, color: number, name: string, activity: string) {
@@ -491,14 +489,25 @@ export class CafeScene extends Scene {
       (states) => this.applyNpcStates(states),
       (npcId, content, eventId) => this.showNpcSpeech(npcId, content, eventId),
     );
-    this.npcSocket.connect();
+    // A desktop WebView can briefly reject a loopback WebSocket while the
+    // bundled local service is still unpacking. The cafe itself remains
+    // playable; NpcSocket will reconnect once the service is ready.
+    try {
+      this.npcSocket.connect();
+    } catch {
+      this.time.delayedCall(1_000, () => this.npcSocket?.connect());
+    }
     this.unsubscribeNpcSend = gameBridge.on('npc.send', ({ content }) => this.npcSocket?.sendChat(content));
   }
 
   private applyNpcStates(states: NpcWorldState[]) {
     this.npcOccupiedSeats.clear();
     states.forEach((state) => {
-      const visual = this.npcVisuals.get(state.actor_id);
+      let visual = this.npcVisuals.get(state.actor_id);
+      if (!visual) {
+        this.createPerson(state.actor_id, state.x, state.y, state.color ?? 0xd18ba5, state.name ?? 'NPC', state.activity ?? '休息');
+        visual = this.npcVisuals.get(state.actor_id);
+      }
       if (!visual) return;
       visual.targetX = state.x;
       visual.targetY = state.y;

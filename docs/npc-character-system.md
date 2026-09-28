@@ -2,13 +2,13 @@
 
 ## Scope
 
-This system defines **who an NPC is at the beginning**. It provides a shared, versioned template for Evan and Loopy, a questionnaire compiler, validation and Awakening. It does not implement affection, relationship or personality scores; gifts; runtime memory; PostgreSQL; or a new behavior engine.
+This system defines **who an NPC is at the beginning**. A fresh save creates the public Mia and Noah templates; players can add their own NPCs to the local roster. Every NPC has a versioned template, questionnaire compiler, validation and Awakening. It does not implement affection, relationship or personality scores; gifts; PostgreSQL; or visual customization.
 
 ```text
 Questionnaire → Character Compiler → validated Template Draft → Awakening → saved Template Version → active runtime context
 ```
 
-Templates are durable JSON under `apps/server/data/characters/<character_id>/`. `index.json` selects an active version while `versions/vN.json` preserves historical documents. That directory is ignored by Git by default: a questionnaire can contain private relationships and memories, so it must not be published accidentally. Evan and Loopy demo seed templates are created on first startup.
+Templates are durable JSON under `~/Library/Application Support/DreamPub/characters/<character_id>/` on macOS. `index.json` selects an active version while `versions/vN.json` preserves historical documents. The directory is outside the repository because a questionnaire can contain private relationships and memories, so it must not be published accidentally. Mia and Noah seed templates are created on first startup; player-created NPCs are stored in the same local roster.
 
 ## Character Questionnaire v2
 
@@ -66,7 +66,7 @@ Without a key or after failed validation, the deterministic compiler maps all tw
 
 Questionnaire v1 remains a supported parser path. Historical v1 JSON lacks the V2-only sections, but is read with compatible defaults and retains `questionnaire_version: 1` / `template_schema_version: 1` in its normalized response. V2 templates require their new fields and use schema version 2.
 
-Evan and Loopy have retained v1 documents and new v2 seed documents. V2 is saved with `parent_version: <character>-template-v1`, `Migrated to Character Questionnaire v2.` as the change note, and is **not automatically activated**. The index remains on v1 until a developer explicitly selects v2. New versions are monotonic, retain parent lineage, and content hashing prevents no-op duplicates.
+Mia and Noah have retained v1 documents and new v2 seed documents. V2 is saved with `parent_version: <character>-template-v1` and is **not automatically activated**. The index remains on v1 until a player saves or selects another version. New versions are monotonic, retain parent lineage, and content hashing prevents no-op duplicates. Player-created NPCs begin with a local v1 template and can immediately be edited through the same questionnaire.
 
 API endpoints remain:
 

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.local_store import game_data_dir
+
 from .schemas import TemplateValidationError, validate_template
 
 
@@ -15,7 +17,10 @@ class CharacterNotFoundError(KeyError):
 
 class CharacterTemplateStorage:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path(__file__).resolve().parents[2] / "data" / "characters"
+        if root:
+            self.root = root
+            return
+        self.root = game_data_dir() / "characters"
 
     def _directory(self, character_id: str) -> Path:
         if not character_id or not character_id.replace("-", "").replace("_", "").isalnum():

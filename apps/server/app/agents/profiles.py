@@ -12,31 +12,37 @@ class NpcProfile:
     personality: str
     backstory: str
     allowed_actions: tuple[str, ...]
+    archetype: str
 
 
-# Edit this file to change a character's name, visual color, biography, personality,
-# initial location, or the activities the policy / model may select.
-NPC_PROFILES: dict[str, NpcProfile] = {
-    "loopy": NpcProfile(
-        npc_id="loopy",
-        name="Loopy",
-        color=0xD18BA5,
-        initial_position=(1450, 805),
-        initial_activity="调咖啡",
-        role="Dream Cafe 的店员",
-        personality="活泼、热情，喜欢观察客人的状态，但不会打断正在专注的人。",
-        backstory="Loopy 正在整理一份手冲咖啡风味笔记，也把这家咖啡馆当作认识新朋友的地方。Loopy很喜欢大家，很喜欢帮助别人。Loopy是一只粉丝小海狸，她有一个好朋友波比。Loopy很勇敢也很有正义感。Loopy总是热爱工作，喜欢阳光 花香和树。",
-        allowed_actions=("make_coffee", "clean", "chat", "rest", "leave", "return"),
-    ),
-    "evan": NpcProfile(
-        npc_id="evan",
-        name="Evan",
-        color=0x9ECC8B,
-        initial_position=(1290, 1100),
-        initial_activity="读报",
-        role="Dream Cafe 的常客",
-        personality="安静、克制、温和而有条理；以《光与夜之恋》中陆沉的角色气质为创作参考，习惯在固定时段阅读、办公和短暂散步。",
-        backstory="Evan 正在整理地方口述史的档案，希望完成一份可检索的目录。",
-        allowed_actions=("read", "work", "chat", "rest", "leave", "return"),
-    ),
+DEFAULT_NPC_ROWS = (
+    {"id": "mia", "name": "Mia", "color": "#d18ba5", "role": "Dream Cafe 的咖啡店员", "archetype": "staff"},
+    {"id": "noah", "name": "Noah", "color": "#9ecc8b", "role": "Dream Cafe 的常客", "archetype": "guest"},
+)
+
+
+def profile_from_record(record: dict[str, object], position: tuple[float, float]) -> NpcProfile:
+    """Build runtime behaviour from a local roster record, not source-code personas."""
+
+    archetype = str(record["archetype"])
+    is_staff = archetype == "staff"
+    try:
+        color = int(str(record["color"]).lstrip("#"), 16)
+    except ValueError:
+        color = 0xd18ba5
+    name, role = str(record["name"]), str(record["role"])
+    return NpcProfile(
+        npc_id=str(record["id"]), name=name, color=color, initial_position=position,
+        initial_activity="调咖啡" if is_staff else "读书", role=role,
+        personality=("活泼、热情，喜欢观察客人的状态，但不会打断正在专注的人。" if is_staff else "成熟、稳重、温和而有条理，珍惜安静思考与可靠的陪伴。"),
+        backstory=(f"{name} 在 Dream Cafe 的吧台工作，喜欢把一杯咖啡调到适合眼前人的状态。" if is_staff else f"{name} 是经常来 Dream Cafe 的客人，把这里当作安静阅读与整理思绪的地方。"),
+        allowed_actions=(("make_coffee", "clean", "chat", "rest", "leave", "return") if is_staff else ("read", "work", "chat", "rest", "leave", "return")),
+        archetype=archetype,
+    )
+
+
+# Compatibility export for code and tests that only need the public starter roster.
+NPC_PROFILES = {
+    row["id"]: profile_from_record(row, position)
+    for row, position in zip(DEFAULT_NPC_ROWS, ((1450, 805), (1290, 1100)), strict=True)
 }

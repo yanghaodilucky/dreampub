@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Mapping
+from uuid import uuid4
 
+from app.local_store import LocalStore
 from .compiler import CharacterGenerator, add_awakening, compile_draft, deterministic_draft, fallback_awakening
 from .schemas import QuestionnaireAnswers, TemplateValidationError, validate_template
 from .seeds import SEED_CHARACTERS
@@ -15,11 +18,13 @@ from .storage import CharacterNotFoundError, CharacterTemplateStorage
 
 
 class CharacterTemplateService:
-    def __init__(self, storage: CharacterTemplateStorage | None = None, generator: CharacterGenerator | None = None) -> None:
+    def __init__(self, storage: CharacterTemplateStorage | None = None, generator: CharacterGenerator | None = None, store: LocalStore | None = None) -> None:
         self.storage = storage or CharacterTemplateStorage()
         self.generator = generator
+        self.store = store or LocalStore()
 
     def ensure_seed_templates(self) -> None:
+        self.store.ensure_npc_profiles()
         for character_id, seed in SEED_CHARACTERS.items():
             try:
                 self.storage.index(character_id)
@@ -48,6 +53,52 @@ class CharacterTemplateService:
                 # selected until a developer explicitly activates v2.
                 self.storage.save_new_version(template, activate=False)
 
+    def list_characters(self) -> list[dict[str, Any]]:
+        self.ensure_seed_templates()
+        return self.store.list_npc_profiles()
+
+    @staticmethod
+    def _new_character_answers(name: str, role: str, archetype: str) -> QuestionnaireAnswers:
+        is_staff = archetype == "staff"
+        place = "吧台" if is_staff else "靠窗的长桌"
+        activity = "调咖啡、整理吧台和研究饮品" if is_staff else "读书、整理笔记和安静工作"
+        return QuestionnaireAnswers.from_mapping({
+            "first_meeting": f"在 Dream Cafe 的{place}，{name} 以 {role} 的身份和玩家第一次打招呼。",
+            "perfect_day": f"在咖啡馆里{activity}，也留一点时间观察来往的人。",
+            "absorbing_activities": activity,
+            "what_matters": "被尊重的边界、真诚的交流，以及能安心停留的日常。",
+            "precious_memory": "第一次在咖啡馆里被认真倾听、也认真倾听别人的时刻。",
+            "unfinished_dream": "在这里慢慢找到一件真正想长期做下去的事。",
+            "meaning_of_love": "先认真理解，再用不打扰对方节奏的方式陪伴。",
+            "showing_care": "先问对方现在是否方便，再用真诚的一句话回应。",
+            "relationship_with_player": "与玩家刚刚认识；愿意慢慢建立可靠、彼此尊重的关系。",
+            "stress_response": "会暂时安静下来，整理手边的事情，等准备好再回来。",
+            "desired_ability": "希望能更好地理解眼前人的需要，让陪伴恰到好处。",
+            "small_wish": "今天在咖啡馆里完成一件小而确定的事。",
+        })
+
+    def create_character(self, *, display_name: str, role: str, archetype: str, color: str) -> dict[str, Any]:
+        self.ensure_seed_templates()
+        if archetype not in {"staff", "guest"}:
+            raise TemplateValidationError("archetype must be staff or guest")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            raise TemplateValidationError("color must be a #RRGGBB value")
+        if not display_name or len(display_name) > 40 or not role or len(role) > 80:
+            raise TemplateValidationError("display_name and role must be non-empty and within their length limits")
+        if len(self.store.list_npc_profiles()) >= 6:
+            raise TemplateValidationError("The cafe currently supports up to six NPCs")
+        stem = re.sub(r"[^a-z0-9]+", "-", display_name.lower()).strip("-")[:24] or "npc"
+        character_id = f"{stem}-{uuid4().hex[:6]}"
+        profile = self.store.create_npc_profile(npc_id=character_id, name=display_name, color=color.lower(), role=role, archetype=archetype)
+        answers = self._new_character_answers(display_name, role, archetype)
+        draft = deterministic_draft(character_id, display_name, answers)
+        draft["awakening"] = {
+            "first_message": fallback_awakening(display_name, answers), "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generator": "deterministic_seed", "model": None, "used_fallback": True, "validation_errors": [],
+        }
+        self.storage.save_new_version(self._versioned(draft, created_by="local_player", change_note="Created in the local NPC roster.", version=1, parent_version=None))
+        return profile
+
     @staticmethod
     def _content_hash(draft: Mapping[str, Any]) -> str:
         stable = deepcopy(dict(draft))
@@ -70,7 +121,7 @@ class CharacterTemplateService:
 
     async def compile(self, character_id: str, payload: Mapping[str, Any], *, save: bool = False) -> dict[str, Any]:
         self.ensure_seed_templates()
-        if character_id not in SEED_CHARACTERS:
+        if character_id not in {item["id"] for item in self.store.list_npc_profiles()}:
             raise CharacterNotFoundError(character_id)
         answers = QuestionnaireAnswers.from_mapping(payload.get("answers", {}))
         display_name = payload.get("display_name") or self.get_active(character_id)["display_name"]
@@ -96,7 +147,7 @@ class CharacterTemplateService:
     def save_preview(self, character_id: str, preview: Mapping[str, Any], *, created_by: str = "local_developer", change_note: str | None = None) -> dict[str, Any]:
         """Persist exactly the reviewed draft instead of compiling it a second time."""
         self.ensure_seed_templates()
-        if character_id not in SEED_CHARACTERS or preview.get("character_id") != character_id:
+        if character_id not in {item["id"] for item in self.store.list_npc_profiles()} or preview.get("character_id") != character_id:
             raise CharacterNotFoundError(character_id)
         current = self.get_active(character_id)
         content_hash = self._content_hash(preview)

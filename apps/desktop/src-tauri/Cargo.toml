@@ -1,0 +1,17 @@
+[package]
+name = "dreampub-desktop"
+version = "0.2.1"
+description = "DreamPub local-first pixel cafe"
+authors = ["DreamPub contributors"]
+edition = "2021"
+
+[lib]
+name = "dreampub_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"

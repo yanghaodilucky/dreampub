@@ -6,6 +6,8 @@ export type NpcWorldState = {
   state: 'idle' | 'moving' | 'working' | 'break' | 'offstage';
   activity?: string;
   visible?: boolean;
+  name?: string;
+  color?: number;
 };
 
 type WorldMessage = { kind: 'snapshot' | 'state.delta'; entities: NpcWorldState[] };
@@ -25,7 +27,7 @@ export class NpcSocket {
   connect() {
     if (this.closed || this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) return;
     const configuredUrl = import.meta.env.VITE_NPC_SERVER_URL;
-    const socketUrl = configuredUrl ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8000/ws/world/dream-cafe`;
+    const socketUrl = configuredUrl ?? 'ws://127.0.0.1:8000/ws/world/dream-cafe';
     const socket = new WebSocket(socketUrl);
     this.socket = socket;
     socket.onmessage = (event) => {

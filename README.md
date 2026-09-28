@@ -1,16 +1,36 @@
 # DreamPub
 
-一个可以进入的 2D 像素咖啡馆原型：管理本地任务、开始专注，并与有自主作息的 NPC 一起学习。
+> 一个下载后在自己电脑上运行的 2D 像素咖啡馆：管理项目、进入专注，并与拥有记忆和日常作息的 NPC 一起生活。
 
-个人仓库：<https://github.com/yanghaodilucky/dreampub>。
+[![Verify](https://github.com/yanghaodilucky/dreampub/actions/workflows/verify.yml/badge.svg)](https://github.com/yanghaodilucky/dreampub/actions/workflows/verify.yml)
 
-## v0.1.3 当前状态
+DreamPub 是一款 macOS 优先的单人离线游戏。它不要求登录，也不会把项目、任务、人物设定或 NPC 记忆上传到服务器。网页界面与本机游戏服务共同运行：前者呈现咖啡馆，后者负责存档、专注状态和 NPC 世界。
 
-这是一个可本地运行、可部署演示的单人原型：React + Phaser 提供咖啡馆、项目／任务抽屉、本地专注记录和人物工作室；FastAPI 提供 Loopy 与 Evan 的实时作息、位置、聊天和人物模板 API。World Event / NPC Action / WebSocket 契约已确定。
+## 你可以做什么
 
-重要边界：项目、任务、专注记录仍只保存在浏览器 `localStorage`；NPC 运行时状态和短期记忆只存在服务进程内。没有登录、数据库、跨设备同步、多人协作或可靠的服务端专注状态机。请勿将本原型数据视为可恢复记录。
+- 在 Dream Cafe 中用方向键或 WASD 移动，坐到座位上开始专注。
+- 创建项目和任务，查看保存在本机的专注记录、完成状态和进度概览。
+- 观察 Mia（活泼的女咖啡店员）与 Noah（成熟稳重的常客）的日常活动；他们会根据上海时间出现、移动、聊天和占用座位，并记住与你专注有关的事件。
+- 通过“人物”工作室填写问卷，编辑初始 NPC，或把自己创建的新 NPC 加入咖啡馆。
 
-启动本地原型：
+## 快速开始
+
+### 环境要求
+
+- Node.js 22+
+- [pnpm](https://pnpm.io/)
+- [uv](https://docs.astral.sh/uv/)
+
+### 从源码运行（当前 macOS 开发版）
+
+先开一个终端启动本机游戏服务。第一次启动会创建你的默认咖啡馆、两条引导任务和本地存档：
+
+```sh
+cd apps/server
+uv run uvicorn app.main:app --port 8000
+```
+
+再开另一个终端启动网页：
 
 ```sh
 cd apps/web
@@ -18,66 +38,102 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-在浏览器打开命令显示的本地地址。使用方向键或 WASD 移动，靠近书桌按 E，或点击座位；选择任务后可查看本地计时。任务和计时会存储在当前浏览器，但并非服务端持久化。
+打开终端显示的网页地址，通常是 `http://localhost:5173`。网页会连接本机的 `http://127.0.0.1:8000`；请让这个终端保持运行。后端健康检查位于 `http://127.0.0.1:8000/health`。
 
-## NPC 服务与 DeepSeek
+## macOS 独立应用
 
-先在一个终端启动后端：
+Apple Silicon（M 系列）Mac 的构建产物是一个包含本机游戏服务的 DMG，不需要用户安装 Node.js、Python 或 uv。下载 GitHub Release 中的 `DreamPub_0.2.1_aarch64.dmg`，打开后将 `DreamPub.app` 拖进 Applications，再双击启动即可。
+
+当前仓库生成的是 ad-hoc 本地签名，适合本机测试；首次从 GitHub 下载时 macOS 可能要求按住 Control 点击 App 并选择“打开”。公开发布前，请使用 Apple Developer ID 重新签名并完成 Apple 公证，避免此提示。
+
+从源码构建安装包：
 
 ```sh
-cd apps/server
-cp .env.example .env
-uv run uvicorn app.main:app --reload --port 8000
+# 仅需在发布机器安装一次：Node.js、pnpm、uv、Rust 和 Xcode Command Line Tools
+cd apps/desktop
+pnpm install
+pnpm run bundle:dmg
 ```
 
-再在另一个终端启动 `apps/web` 的 Vite 服务。网页会自动连接 `ws://127.0.0.1:8000/ws/world/dream-cafe`；后端没有运行时，网页仍展示静态 NPC。
+产物位于 `apps/desktop/src-tauri/target/release/bundle/macos/DreamPub_0.2.1_aarch64.dmg`。如持有 Developer ID，在构建前设置 `DREAMPUB_CODESIGN_IDENTITY`，构建脚本会用它签名 App。
 
-在 `apps/server/.env` 中填写 `DEEPSEEK_API_KEY=你的密钥` 即可启用 DeepSeek 决策。密钥不会进入浏览器或 Git；未配置时两名 NPC 使用确定性作息。`NPC_TICK_SECONDS` 是服务检查时间与玩家距离的间隔；NPC 的日常活动会持续约 12–90 分钟，不会因检查而频繁换状态。
+## 使用说明
 
-人物工作室生成的本地模板保存在 `apps/server/data/characters/`，该目录已被 Git 忽略，避免把个人问卷回答或聊天设定意外公开。首次启动会自动创建 Evan 和 Loopy 的演示种子模板。
+| 目标 | 操作 |
+| --- | --- |
+| 在咖啡馆移动 | 使用方向键或 WASD。 |
+| 坐下并专注 | 靠近座位按 `E`，或直接点击座位；在专注抽屉中选择一个任务。 |
+| 离开座位 | 按方向键或 `E`，或在专注面板中选择离开。 |
+| 管理项目和任务 | 点击顶部“项目”，创建、编辑、完成或删除项目与任务。 |
+| 查看专注记录 | 点击顶部“专注”，选择任务后开始。可以暂停、继续或结束；结束时会保存一段本地记录。 |
+| 与 NPC 对话 | 后端运行时，在底部聊天框输入文字；系统会将消息发给最近、可见的 NPC。 |
+| 编辑或新增 NPC | 点击顶部“人物”。可选择已有 NPC 填写问卷、预览并保存，也可点“+ 新 NPC”设置名字与身份后加入咖啡馆。编辑期间 NPC 世界会暂停。 |
 
-可手动编辑的运行时档案在 [NPC_PROFILES](apps/server/app/agents/profiles.py)：包括姓名、颜色、初始位置和允许活动。角色的稳定人设、倾向、问卷来源、醒来第一句话和版本历史由 [NPC Character Template System](docs/npc-character-system.md) 管理；运行时会读取当前 active template 作为模型聊天与活动建议的上下文。前端只负责显示和移动 NPC。
+## 可选：启用 DeepSeek
 
-## 首版
+默认情况下，NPC 使用确定性的作息与回退回复，不需要 API 密钥。若想让 NPC 根据人物模板生成活动建议和聊天回复，在桌面游戏顶部点击“⚙ AI”，填写你自己的兼容 OpenAI 的 API 地址、模型名与 API Key（DeepSeek 默认值已预填）。
 
-- 网页端，一个像素咖啡馆、一个玩家、两个 NPC（Loopy 和 Evan；第三个待核心闭环验证后加入）。
-- 项目、任务、真实专注计时与持久化记录、项目进度板。
-- NPC 确定性作息、事件感知、受控动作、长期记忆和可追踪决策。
-- 第二阶段加入好友联机。家、咖啡馆、换装、家具编辑、天气仅保留扩展位置。
+Key 只会写入当前 macOS 用户的 Keychain：不会进入 SQLite 存档、不会回显给网页、不会打进 DMG，也不会提交到 GitHub。设置面板可测试连接或随时移除 Key；移除后 NPC 会立刻退回离线规则模式。
 
-## 文档
+仅在从源码调试服务时，也可以在 `apps/server/.env` 中填写环境变量：
 
-- [产品与验收标准](docs/product.md)
-- [架构与数据流](docs/architecture.md)
-- [NPC 设计](docs/npc-design.md)
-- [NPC 角色模板与版本机制](docs/npc-character-system.md)
-- [开发里程碑](docs/roadmap.md)
-- [目录职责](docs/repository-layout.md)
-- [契约说明](contracts/README.md)
+```dotenv
+DEEPSEEK_API_KEY=你的密钥
+DEEPSEEK_MODEL=deepseek-chat
+```
 
-计划技术栈：React + TypeScript + Vite、Phaser 4、FastAPI、PostgreSQL。React 管产品，Phaser 管世界。Redis 与 pgvector 暂不引入。依赖版本将在可运行骨架阶段锁定。
+`.env` 已被 Git 忽略，但它仅适合开发机，不会随 macOS App 发布。请不要把密钥提交、粘贴到 Issue，或暴露给浏览器。
 
-## 契约校验
+## 本地存档与隐私
 
-安装 [uv](https://docs.astral.sh/uv/) 后，在仓库根目录执行：
+DreamPub 的可玩数据存放在本机，不需要账号：
+
+- macOS 默认位置：`~/Library/Application Support/DreamPub/dreampub.sqlite3`
+- 人物工作室的问卷、模板和版本：`~/Library/Application Support/DreamPub/characters/`
+- 首次启动只会创建公开的基础角色：Mia（活泼女咖啡店员）与 Noah（成熟稳重的常客）。不会包含开发者的私人 NPC 设定或 API Key。
+- 你可以在“人物”工作室改写任何角色的性格、关系、关心方式和人生愿望，也可以新增最多四位 NPC。新增的角色和记忆只保存在自己的这台 Mac。
+
+当前阶段只自定义 NPC 的内在设定，仍保留游戏中的像素方块形象。它们不会自动同步到别的设备；如要备份，请在关闭游戏服务后复制整个 `DreamPub` 文件夹。
+
+## 验证与开发
 
 ```sh
+# 前端：TypeScript 检查和生产构建
+cd apps/web
+pnpm build
+
+# 后端：人物模板和运行时回退测试
+cd ../server
+uv run python -m unittest discover -s tests -v
+
+# 仓库根目录：JSON Schema 契约校验
+cd ../..
 uv run --with jsonschema==4.25.1 python scripts/validate_contracts.py
 ```
 
-此命令校验 Schema、有效示例及应被拒绝的输入，不代表游戏或后端已经实现。
+GitHub Actions 会在推送和拉取请求时运行相同的构建、测试和契约校验。
 
-## 发布 GitHub 版本
+## 当前阶段与边界
 
-发布边界、已知限制与检查清单见 [v0.1.3 发布说明](docs/releases/v0.1.3.md)。GitHub Actions 会在推送和拉取请求时构建前端、运行后端测试和校验契约。
+DreamPub 正在从可运行原型收敛为可发布的离线单机游戏。目前已经具备本机 SQLite 存档、服务端专注状态机、NPC 长期记忆、人物模板版本和 Apple Silicon macOS 独立应用；还未完成以下发布体验：
 
-部署前端并连接远程服务时，在构建环境设置 `VITE_NPC_SERVER_URL=wss://your-npc-service.example.com/ws/world/dream-cafe`；前端会从它推导 HTTP API 地址。生产服务还必须将前端域名加入 `ALLOWED_ORIGINS`。
+- Apple Developer ID 签名与 Apple 公证（当前 DMG 是可本机安装的 ad-hoc 签名版本）。
+- NPC 外表、服装或换装自定义（本阶段刻意保留原有像素方块）。
+- 跨设备同步、多用户协作与在线账号系统（当前不在产品范围内）。
+- 使用用户自带 DeepSeek Key 时的用量提示和隐私说明页面。
 
-确认 CI 通过且未暂存 `.env` 或密钥后，创建标签即可触发 GitHub Release 工作流：
+完整边界和版本变更见 [v0.1.3 发布说明](docs/releases/v0.1.3.md)。
 
-```sh
-git tag -a v0.1.3 -m "DreamPub v0.1.3"
-git push origin main --follow-tags
-```
+## 项目文档
 
-标签工作流会先重新验证项目，再生成 GitHub Release 说明。当前仓库尚未声明开源许可证；在公开发布前请先选择并添加许可证。
+- [产品范围与验收标准](docs/product.md)
+- [架构与数据流](docs/architecture.md)
+- [NPC 设计](docs/npc-design.md)
+- [人物模板与版本机制](docs/npc-character-system.md)
+- [开发路线图](docs/roadmap.md)
+- [目录职责](docs/repository-layout.md)
+- [实时与领域契约](contracts/README.md)
+
+## 许可证
+
+仓库目前尚未声明开源许可证。若要公开复用、贡献或再分发，请先由项目维护者选择并添加合适的许可证。

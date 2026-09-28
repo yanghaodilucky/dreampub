@@ -8,8 +8,9 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.agents.deepseek import DeepSeekClient
-from app.agents.profiles import NPC_PROFILES, NpcProfile
+from app.agents.profiles import NpcProfile, profile_from_record
 from app.characters.service import CharacterTemplateService
+from app.local_store import LocalStore
 
 
 CAFE_LOCATION = "dream-cafe"
@@ -21,6 +22,7 @@ ANCHORS = {
     "community_right": (1235, 1080),
 }
 WORK_SEAT_ANCHORS = ("window_north", "window_south", "window_four_north", "window_four_south", "window_lower", "community_left", "community_right")
+NPC_SPAWN_POSITIONS = ((1450, 805), (1290, 1100), (1110, 1010), (962, 1167), (895, 938), (1235, 1080))
 ACTIVITIES = {
     "make_coffee": ("coffee_bar", "调咖啡", "working"), "clean": ("cleaning", "打扫卫生", "working"),
     "read": ("window_north", "读报", "working"), "work": ("community_right", "办公", "working"),
@@ -42,6 +44,8 @@ class NpcState:
     focus_session_id: None
     activity: str
     visible: bool
+    name: str
+    color: int
 
 
 class CafeWorld:
@@ -51,41 +55,98 @@ class CafeWorld:
         self.stream_id = "cafe-runtime-v1"
         self.paused = False
         self.clients: set = set()
-        self.model = DeepSeekClient()
-        self.character_templates = CharacterTemplateService(generator=self.model)
+        self.store = LocalStore()
+        self.store.ensure_npc_profiles()
+        self.model = DeepSeekClient(self.store.llm_settings())
+        self.character_templates = CharacterTemplateService(generator=self.model, store=self.store)
         self.character_templates.ensure_seed_templates()
+        self.profiles = self._load_profiles()
         self.states = {
-            profile.npc_id: NpcState(profile.npc_id, "npc", CAFE_LOCATION, *profile.initial_position, "down", "idle", None, profile.initial_activity, False)
-            for profile in NPC_PROFILES.values()
+            profile.npc_id: NpcState(profile.npc_id, "npc", CAFE_LOCATION, *profile.initial_position, "down", "idle", None, profile.initial_activity, False, profile.name, profile.color)
+            for profile in self.profiles.values()
         }
-        self.memories: dict[str, list[str]] = {npc_id: [] for npc_id in NPC_PROFILES}
-        self.next_action_at: dict[str, datetime] = {npc_id: datetime.min.replace(tzinfo=SHANGHAI) for npc_id in NPC_PROFILES}
+        self.memories: dict[str, list[str]] = {npc_id: self.store.npc_memories(npc_id) for npc_id in self.profiles}
+        self.next_action_at: dict[str, datetime] = {npc_id: datetime.min.replace(tzinfo=SHANGHAI) for npc_id in self.profiles}
         self.player_position: tuple[float, float] | None = None
-        self.last_greeting_at: dict[str, datetime] = {npc_id: datetime.min.replace(tzinfo=SHANGHAI) for npc_id in NPC_PROFILES}
+        self.last_greeting_at: dict[str, datetime] = {npc_id: datetime.min.replace(tzinfo=SHANGHAI) for npc_id in self.profiles}
         # WebSocket reconnects and development hot reloads can briefly deliver
         # the same chat command more than once. Keep a bounded, short-lived
         # record so one player action creates at most one NPC reply.
         self.recent_chat_message_ids: dict[str, datetime] = {}
         self.recent_chat_contents: dict[str, datetime] = {}
+        self.player_is_focusing = bool(self.store.active_focus_session())
         # A backend restart must reconstruct the cafe from the clock, rather than
         # briefly placing every NPC at their shared arrival point.
         self.restore_from_clock(self.now())
+
+    def _load_profiles(self) -> dict[str, NpcProfile]:
+        return {
+            str(row["id"]): profile_from_record(row, NPC_SPAWN_POSITIONS[index % len(NPC_SPAWN_POSITIONS)])
+            for index, row in enumerate(self.store.list_npc_profiles())
+        }
+
+    def reload_npc_roster(self) -> list[str]:
+        """Adopt characters added through the local studio without restarting."""
+
+        updated = self._load_profiles()
+        added = [npc_id for npc_id in updated if npc_id not in self.profiles]
+        self.profiles = updated
+        for npc_id in added:
+            profile = self.profiles[npc_id]
+            self.states[npc_id] = NpcState(npc_id, "npc", CAFE_LOCATION, *profile.initial_position, "down", "idle", None, profile.initial_activity, False, profile.name, profile.color)
+            self.memories[npc_id] = self.store.npc_memories(npc_id)
+            self.next_action_at[npc_id] = datetime.min.replace(tzinfo=SHANGHAI)
+            self.last_greeting_at[npc_id] = datetime.min.replace(tzinfo=SHANGHAI)
+            self.apply_action(profile, "return", self.now())
+        return added
+
+    def llm_status(self) -> dict[str, str | bool]:
+        return {
+            "configured": self.model.enabled,
+            "key_in_keychain": self.model.key_is_in_keychain,
+            "model": self.model.model,
+            "base_url": self.model.base_url,
+        }
+
+    def configure_llm(self, *, model: str, base_url: str, api_key: str | None = None) -> dict[str, str | bool]:
+        self.model.configure(model=model, base_url=base_url, api_key=api_key)
+        self.store.update_llm_settings(model=model, base_url=base_url)
+        return self.llm_status()
+
+    def clear_llm_key(self) -> dict[str, str | bool]:
+        self.model.clear_local_key()
+        return self.llm_status()
 
     @staticmethod
     def now() -> datetime:
         return datetime.now(SHANGHAI)
 
     def snapshot(self) -> dict:
+        active_focus = self.store.active_focus_session()
         return {
             "schema_version": 1, "kind": "snapshot", "world_id": CAFE_LOCATION, "location_id": CAFE_LOCATION,
             "stream_id": self.stream_id, "last_sequence": self.sequence, "revision": self.revision,
             "server_time": datetime.now(UTC).isoformat(), "timezone": "Asia/Shanghai", "map_id": CAFE_LOCATION,
-            "entities": [asdict(state) for state in self.states.values()], "anchors": [], "furniture": [], "focus_sessions": [], "paused": self.paused,
+            "entities": [asdict(state) for state in self.states.values()], "anchors": [], "furniture": [], "focus_sessions": [active_focus] if active_focus else [], "paused": self.paused,
         }
 
     def set_paused(self, paused: bool) -> dict:
         self.paused = paused
         return {"world_id": CAFE_LOCATION, "paused": self.paused}
+
+    def set_player_focus(self, active: bool, task_title: str | None = None) -> None:
+        """Let local agents respect a persisted focus session without client trust."""
+
+        self.player_is_focusing = active
+        if task_title:
+            detail = f"玩家{'开始' if active else '结束'}专注：{task_title}"
+            for npc_id in self.memories:
+                self.remember(npc_id, "focus", detail)
+
+    def remember(self, npc_id: str, kind: str, content: str) -> None:
+        self.store.add_npc_memory(npc_id, kind, content)
+        self.memories[npc_id].append(content)
+        del self.memories[npc_id][:-12]
 
     async def connect(self, websocket) -> None:
         await websocket.accept()
@@ -115,6 +176,7 @@ class CafeWorld:
 
     async def speak(self, npc_id: str, content: str, emotion: str = "warm") -> None:
         self.sequence += 1
+        self.store.add_world_event("npc.spoke", {"npc_id": npc_id, "content": content[:500], "emotion": emotion})
         await self.broadcast({
             "schema_version": 1, "kind": "world.event", "event": {
                 "schema_version": 1, "event_id": str(uuid4()), "world_id": CAFE_LOCATION, "sequence": self.sequence,
@@ -129,7 +191,7 @@ class CafeWorld:
             return
         now = self.now()
         changed = False
-        for profile in NPC_PROFILES.values():
+        for profile in self.profiles.values():
             changed = await self.apply_schedule(profile, now) or changed
         await self.maybe_greet_nearby(now)
         if changed:
@@ -139,7 +201,7 @@ class CafeWorld:
         npc = self.states[profile.npc_id]
         minutes = now.hour * 60 + now.minute
         arrival = 9 * 60
-        departure = 20 * 60 if profile.npc_id == "loopy" else 21 * 60 + 30
+        departure = 20 * 60 if profile.archetype == "staff" else 21 * 60 + 30
         if minutes < arrival or minutes >= departure:
             if npc.visible:
                 self.apply_action(profile, "leave", now)
@@ -148,7 +210,7 @@ class CafeWorld:
         if not npc.visible:
             self.apply_action(profile, "return", now)
             return True
-        if profile.npc_id == "evan" and minutes >= 20 * 60:
+        if profile.archetype == "guest" and minutes >= 20 * 60:
             if npc.activity == "办公":
                 return False
             return self.apply_action(profile, "work", now, until=now.replace(hour=21, minute=30, second=0, microsecond=0))
@@ -165,12 +227,12 @@ class CafeWorld:
     def restore_from_clock(self, now: datetime) -> None:
         """Restore an in-cafe position without relying on a browser session."""
         minutes = now.hour * 60 + now.minute
-        for profile in NPC_PROFILES.values():
-            departure = 20 * 60 if profile.npc_id == "loopy" else 21 * 60 + 30
+        for profile in self.profiles.values():
+            departure = 20 * 60 if profile.archetype == "staff" else 21 * 60 + 30
             if minutes < 9 * 60 or minutes >= departure:
                 self.apply_action(profile, "leave", now)
                 continue
-            if profile.npc_id == "evan" and minutes >= 20 * 60:
+            if profile.archetype == "guest" and minutes >= 20 * 60:
                 self.apply_action(profile, "work", now, until=now.replace(hour=21, minute=30, second=0, microsecond=0))
                 continue
             self.apply_action(profile, self.clock_action(profile, now), now, until=self.next_clock_slot(now))
@@ -182,19 +244,19 @@ class CafeWorld:
     @staticmethod
     def clock_action(profile: NpcProfile, now: datetime) -> str:
         """A repeatable first activity for the current half-hour of the day."""
-        actions = ("make_coffee", "clean", "rest") if profile.npc_id == "loopy" else ("read", "work", "rest")
+        actions = ("make_coffee", "clean", "rest") if profile.archetype == "staff" else ("read", "work", "rest")
         slot = now.hour * 2 + now.minute // 30
-        offset = 0 if profile.npc_id == "loopy" else 1
+        offset = 0 if profile.archetype == "staff" else 1
         return actions[(slot + offset) % len(actions)]
 
     def rule_action(self, profile: NpcProfile) -> str:
-        if profile.npc_id == "loopy":
+        if profile.archetype == "staff":
             return random.choices(("make_coffee", "clean", "rest"), weights=(6, 2, 1))[0]
         return random.choices(("read", "work", "rest"), weights=(5, 4, 1))[0]
 
     def apply_action(self, profile: NpcProfile, action: str, now: datetime, until: datetime | None = None) -> bool:
         anchor, activity, state = ACTIVITIES.get(action, ACTIVITIES["rest"])
-        if profile.npc_id == "evan" and action in {"read", "work"}:
+        if profile.archetype == "guest" and action in {"read", "work"}:
             slot = now.hour * 2 + now.minute // 30
             anchor = WORK_SEAT_ANCHORS[slot % len(WORK_SEAT_ANCHORS)]
         npc = self.states[profile.npc_id]
@@ -211,15 +273,14 @@ class CafeWorld:
         else:
             lower, upper = ACTIVITY_MINUTES[action]
             self.next_action_at[profile.npc_id] = now + timedelta(minutes=random.randint(lower, upper))
-        self.memories[profile.npc_id].append(f"{now.strftime('%H:%M')}：{activity}")
-        del self.memories[profile.npc_id][:-12]
+        self.remember(profile.npc_id, "activity", f"{now.strftime('%H:%M')}：{activity}")
         return previous != (npc.x, npc.y, npc.activity, npc.state, npc.visible)
 
     async def maybe_greet_nearby(self, now: datetime) -> None:
-        if not self.player_position:
+        if not self.player_position or self.player_is_focusing:
             return
         player_x, player_y = self.player_position
-        for profile in NPC_PROFILES.values():
+        for profile in self.profiles.values():
             npc = self.states[profile.npc_id]
             if not npc.visible or now - self.last_greeting_at[profile.npc_id] < timedelta(minutes=12):
                 continue
@@ -281,13 +342,13 @@ class CafeWorld:
         npc_id = self.closest_visible_npc()
         if not npc_id:
             return
-        profile = NPC_PROFILES[npc_id]
+        profile = self.profiles[npc_id]
         self.last_greeting_at[npc_id] = now
-        self.memories[npc_id].append(f"用户说：{content}")
+        self.remember(npc_id, "conversation", f"用户说：{content}")
         reply = await self.model.reply(profile, content, self.memories[npc_id], self.character_templates.get_active_or_none(npc_id))
         if not reply:
             reply = self.template_fallback_reply(profile)
-        self.memories[npc_id].append(f"{profile.name}说：{reply}")
+        self.remember(npc_id, "conversation", f"{profile.name}说：{reply}")
         await self.speak(npc_id, reply)
 
     def _prune_recent_chat_requests(self, now: datetime) -> None:

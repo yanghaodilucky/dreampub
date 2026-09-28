@@ -2,23 +2,62 @@ import asyncio
 import json
 import os
 from typing import Any, Mapping
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.settings import configure_environment
+from .credentials import MacOSKeychain
 from .profiles import NpcProfile
 
 configure_environment()
 
 
 class DeepSeekClient:
-    def __init__(self) -> None:
-        self.api_key = os.getenv("DEEPSEEK_API_KEY", "")
-        self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    def __init__(self, settings: Mapping[str, str] | None = None, keychain: MacOSKeychain | None = None) -> None:
+        self.keychain = keychain or MacOSKeychain()
+        self._key_from_keychain = self.keychain.load()
+        self.api_key = self._key_from_keychain or os.getenv("DEEPSEEK_API_KEY", "")
+        settings = settings or {}
+        self.model = settings.get("model") or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.base_url = (settings.get("base_url") or "https://api.deepseek.com").rstrip("/")
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
+
+    @property
+    def key_is_in_keychain(self) -> bool:
+        return bool(self._key_from_keychain)
+
+    def configure(self, *, model: str, base_url: str, api_key: str | None = None) -> None:
+        if api_key is not None:
+            self.keychain.save(api_key)
+            self._key_from_keychain = api_key
+            self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+
+    def clear_local_key(self) -> None:
+        self.keychain.clear()
+        if self._key_from_keychain:
+            self.api_key = ""
+        self._key_from_keychain = ""
+
+    async def test_connection(self) -> tuple[bool, str]:
+        if not self.enabled:
+            return False, "请先保存 API Key。"
+
+        def request_models() -> tuple[bool, str]:
+            request = Request(f"{self.base_url}/models", headers={"Authorization": f"Bearer {self.api_key}"}, method="GET")
+            try:
+                with urlopen(request, timeout=12) as response:
+                    return 200 <= response.status < 300, "连接成功，NPC 现在可以使用你的模型。"
+            except HTTPError as error:
+                return False, f"服务返回 HTTP {error.code}；请检查 Key、模型服务地址和权限。"
+            except (URLError, TimeoutError):
+                return False, "无法连接模型服务；请检查网络和服务地址。"
+
+        return await asyncio.to_thread(request_models)
 
     async def _json_completion(self, system: str, prompt: str, *, temperature: float = 0.3) -> dict[str, Any] | None:
         if not self.enabled:
@@ -31,7 +70,7 @@ class DeepSeekClient:
         }).encode()
 
         def request_model() -> dict[str, Any] | None:
-            request = Request("https://api.deepseek.com/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
+            request = Request(f"{self.base_url}/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
             try:
                 with urlopen(request, timeout=20) as response:
                     body = json.loads(response.read().decode())
@@ -48,7 +87,7 @@ class DeepSeekClient:
         payload = json.dumps({"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "temperature": temperature}).encode()
 
         def request_model() -> str | None:
-            request = Request("https://api.deepseek.com/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
+            request = Request(f"{self.base_url}/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
             try:
                 with urlopen(request, timeout=20) as response:
                     body = json.loads(response.read().decode())
@@ -127,7 +166,7 @@ class DeepSeekClient:
 
         def request_model() -> dict[str, str] | None:
             request = Request(
-                "https://api.deepseek.com/chat/completions",
+                f"{self.base_url}/chat/completions",
                 data=payload,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 method="POST",
@@ -162,7 +201,7 @@ class DeepSeekClient:
         }).encode()
 
         def request_model() -> str | None:
-            request = Request("https://api.deepseek.com/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
+            request = Request(f"{self.base_url}/chat/completions", data=payload, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
             try:
                 with urlopen(request, timeout=20) as response:
                     body = json.loads(response.read().decode())

@@ -1,0 +1,18 @@
+{
+  "name": "dreampub-desktop",
+  "private": true,
+  "version": "0.2.1",
+  "type": "module",
+  "scripts": {
+    "build:sidecar": "bash scripts/build-sidecar.sh",
+    "sign:local": "bash scripts/sign-local-app.sh",
+    "make:dmg": "bash scripts/make-dmg.sh",
+    "dev": "pnpm run build:sidecar && tauri dev",
+    "build": "pnpm run build:sidecar && tauri build",
+    "bundle:app": "pnpm run build:sidecar && tauri build --bundles app && pnpm run sign:local",
+    "bundle:dmg": "pnpm run bundle:app && pnpm run make:dmg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
